@@ -172,7 +172,14 @@ static void cmd_help(int argc, char **argv) {
 
     for (int i = 0; commands[i].name != NULL; i++) {
         vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-        printk("  %-12s", commands[i].name);
+        printk("  %s", commands[i].name);
+
+        /* Add padding for alignment */
+        int len = strlen(commands[i].name);
+        for (int j = len; j < 12; j++) {
+            printk(" ");
+        }
+
         vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
         printk(" - %s\n", commands[i].description);
     }

@@ -122,58 +122,6 @@ static void init_screens(void) {
     screen_switch(0);
 }
 
-/* Process keyboard input */
-static void handle_keyboard(void) {
-    while (1) {
-        if (keyboard_haskey()) {
-            int c = keyboard_getchar();
-
-            if (c == 0) {
-                continue;  /* No character or modifier key */
-            }
-
-            /* Handle screen switching (Alt+F1 through Alt+F4) */
-            if (c >= KEY_F1 && c <= KEY_F4) {
-                int screen_num = c - KEY_F1;
-                if (screen_num < MAX_SCREENS) {
-                    screen_switch(screen_num);
-                }
-                continue;
-            }
-
-            /* Handle backspace */
-            if (c == KEY_BACKSPACE || c == '\b') {
-                size_t row, col;
-                vga_get_cursor_position(&row, &col);
-                if (col > 2 || row > 0) {  /* Don't erase the prompt */
-                    if (col == 0 && row > 0) {
-                        vga_set_cursor_position(row - 1, VGA_WIDTH - 1);
-                    } else if (col > 0) {
-                        vga_set_cursor_position(row, col - 1);
-                    }
-                    vga_putchar(' ');
-                    vga_get_cursor_position(&row, &col);
-                    if (col > 0) {
-                        vga_set_cursor_position(row, col - 1);
-                    }
-                }
-                continue;
-            }
-
-            /* Handle regular characters */
-            if (c >= 32 && c <= 126) {  /* Printable ASCII */
-                vga_putchar(c);
-            } else if (c == '\n') {
-                vga_putchar('\n');
-                printk("> ");
-            }
-        }
-
-        /* Small delay to avoid consuming 100% CPU */
-        for (volatile int i = 0; i < 10000; i++);
-    }
-}
-
 /* Handle screen switching (called from shell) */
 void handle_screen_switch(int screen_num) {
     if (screen_num < MAX_SCREENS) {
