@@ -8,8 +8,9 @@
 /* Kernel page directory (must be page-aligned) */
 static page_directory_t kernel_directory __attribute__((aligned(PAGE_SIZE)));
 
-/* Kernel page tables (identity map first 4MB) */
+/* Kernel page tables (identity map first 8MB) */
 static page_table_t kernel_table_0 __attribute__((aligned(PAGE_SIZE)));
+static page_table_t kernel_table_1 __attribute__((aligned(PAGE_SIZE)));
 
 /* Current page directory */
 static page_directory_t *current_directory = NULL;
@@ -19,8 +20,9 @@ void paging_init(void) {
     /* Clear the page directory */
     memset(&kernel_directory, 0, sizeof(page_directory_t));
 
-    /* Clear the first page table */
+    /* Clear the page tables */
     memset(&kernel_table_0, 0, sizeof(page_table_t));
+    memset(&kernel_table_1, 0, sizeof(page_table_t));
 
     /* Identity map the first 4MB (0x00000000 - 0x00400000) */
     /* This ensures kernel code and data remain accessible */
@@ -29,13 +31,21 @@ void paging_init(void) {
         kernel_table_0.entries[i] = phys_addr | PAGE_PRESENT | PAGE_WRITE;
     }
 
-    /* Set the first page directory entry to point to our page table */
+    /* Identity map the second 4MB (0x00400000 - 0x00800000) */
+    /* This ensures kernel heap (at 5MB) is accessible */
+    for (uint32_t i = 0; i < PAGE_ENTRIES; i++) {
+        uint32_t phys_addr = (PAGE_ENTRIES + i) * PAGE_SIZE;
+        kernel_table_1.entries[i] = phys_addr | PAGE_PRESENT | PAGE_WRITE;
+    }
+
+    /* Set the first two page directory entries */
     kernel_directory.entries[0] = ((uint32_t)&kernel_table_0) | PAGE_PRESENT | PAGE_WRITE;
+    kernel_directory.entries[1] = ((uint32_t)&kernel_table_1) | PAGE_PRESENT | PAGE_WRITE;
 
     /* Set as current directory */
     current_directory = &kernel_directory;
 
-    kernel_info("Paging initialized (identity mapped first 4MB)");
+    kernel_info("Paging initialized (identity mapped first 8MB)");
 }
 
 /* Enable paging by loading CR3 and setting the paging bit in CR0 */
@@ -70,7 +80,7 @@ void paging_map_page(uint32_t virt_addr, uint32_t phys_addr, uint32_t flags) {
     /* Check if page directory entry exists */
     if (!(current_directory->entries[dir_index] & PAGE_PRESENT)) {
         /* Would need to allocate a new page table here */
-        /* For now, we only support the first 4MB */
+        /* For now, we only support the first 8MB */
         kernel_panic("Cannot map page: page table not present");
     }
 

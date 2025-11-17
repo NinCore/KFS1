@@ -28,7 +28,6 @@ typedef struct vmem_block {
 /* Head of virtual memory list */
 static vmem_block_t *vmem_head = NULL;
 static bool vmem_initialized = false;
-static uint32_t next_virt_addr = VMEM_START;
 
 /* Statistics */
 static size_t vmem_allocated = 0;
@@ -104,10 +103,9 @@ void *vmalloc(size_t size) {
             return NULL;
         }
 
-        /* Map virtual to physical */
-        uint32_t virt_page = virt_addr + (i * PAGE_SIZE);
         /* Note: paging_map_page would be called here in full implementation */
         /* For now, we just track the allocation */
+        (void)phys_page;  /* Suppress warning, will be used when paging is implemented */
     }
 
     /* Mark as allocated */
