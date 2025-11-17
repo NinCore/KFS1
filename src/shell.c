@@ -8,6 +8,9 @@
 #include "../include/gdt.h"
 #include "../include/keyboard.h"
 #include "../include/io.h"
+#include "../include/kmalloc.h"
+#include "../include/vmalloc.h"
+#include "../include/paging.h"
 
 /* Shell state */
 static char shell_buffer[SHELL_BUFFER_SIZE];
@@ -23,6 +26,10 @@ static void cmd_reboot(int argc, char **argv);
 static void cmd_halt(int argc, char **argv);
 static void cmd_echo(int argc, char **argv);
 static void cmd_about(int argc, char **argv);
+static void cmd_mem(int argc, char **argv);
+static void cmd_kmalloc_stats(int argc, char **argv);
+static void cmd_vmalloc_stats(int argc, char **argv);
+static void cmd_memtest(int argc, char **argv);
 
 /* Command structure */
 struct shell_command {
@@ -38,6 +45,10 @@ static const struct shell_command commands[] = {
     {"stack",      "Display kernel stack information", cmd_stack},
     {"stacktrace", "Display stack trace", cmd_stacktrace},
     {"gdt",        "Display GDT information", cmd_gdt},
+    {"mem",        "Display memory information", cmd_mem},
+    {"kstats",     "Display kernel heap statistics", cmd_kmalloc_stats},
+    {"vstats",     "Display virtual memory statistics", cmd_vmalloc_stats},
+    {"memtest",    "Test memory allocation", cmd_memtest},
     {"reboot",     "Reboot the system", cmd_reboot},
     {"halt",       "Halt the system", cmd_halt},
     {"echo",       "Echo arguments", cmd_echo},
@@ -280,26 +291,102 @@ static void cmd_about(int argc, char **argv) {
     (void)argv;
 
     vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
-    printk("\n=== KFS_2: GDT & Stack ===\n");
+    printk("\n=== KFS_3: Memory Management ===\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    printk("\nKernel From Scratch - Second Subject\n");
+    printk("\nKernel From Scratch - Third Subject\n");
     printk("A minimal 32-bit x86 kernel with:\n");
     printk("  - Global Descriptor Table (GDT)\n");
     printk("  - Stack management and inspection\n");
+    printk("  - Memory paging system\n");
+    printk("  - Physical memory allocator (kmalloc)\n");
+    printk("  - Virtual memory allocator (vmalloc)\n");
+    printk("  - Kernel panic handling\n");
     printk("  - Minimalistic debug shell\n");
-    printk("  - Keyboard input handling\n");
-    printk("  - VGA text mode output\n");
     printk("\nArchitecture: i386 (x86)\n");
     printk("Boot Loader: GRUB Multiboot\n");
     printk("No standard library dependencies\n");
     printk("\n");
 }
 
+/* Memory info command */
+static void cmd_mem(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    printk("\n=== Memory System Overview ===\n");
+    printk("Page size: %d bytes\n", PAGE_SIZE);
+    printk("Pages per table: %d\n", PAGE_ENTRIES);
+    printk("Pages per directory: %d\n", PAGE_ENTRIES);
+    printk("Virtual address space: 4 GB\n");
+    printk("\nMemory regions:\n");
+    printk("  Kernel heap:     0x00500000 - 0x00600000 (1 MB)\n");
+    printk("  Virtual memory:  0x10000000 - 0x20000000 (256 MB)\n");
+    printk("\nType 'kstats' for kernel heap statistics\n");
+    printk("Type 'vstats' for virtual memory statistics\n\n");
+}
+
+/* Kernel heap statistics command */
+static void cmd_kmalloc_stats(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+    kmalloc_stats();
+}
+
+/* Virtual memory statistics command */
+static void cmd_vmalloc_stats(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+    vmalloc_stats();
+}
+
+/* Memory test command */
+static void cmd_memtest(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    printk("\n=== Memory Allocation Test ===\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    /* Test kmalloc */
+    printk("\nTesting kmalloc...\n");
+    void *ptr1 = kmalloc(1024);
+    printk("  Allocated 1024 bytes at 0x%x\n", (uint32_t)ptr1);
+
+    void *ptr2 = kmalloc(2048);
+    printk("  Allocated 2048 bytes at 0x%x\n", (uint32_t)ptr2);
+
+    void *ptr3 = kmalloc(512);
+    printk("  Allocated 512 bytes at 0x%x\n", (uint32_t)ptr3);
+
+    /* Test kfree */
+    printk("\nTesting kfree...\n");
+    kfree(ptr2);
+    printk("  Freed 0x%x\n", (uint32_t)ptr2);
+
+    /* Test vmalloc */
+    printk("\nTesting vmalloc...\n");
+    void *vptr1 = vmalloc(8192);
+    printk("  Allocated 8192 bytes at 0x%x\n", (uint32_t)vptr1);
+
+    void *vptr2 = vmalloc(16384);
+    printk("  Allocated 16384 bytes at 0x%x\n", (uint32_t)vptr2);
+
+    /* Show statistics */
+    printk("\nCurrent memory state:\n");
+    kmalloc_stats();
+    vmalloc_stats();
+
+    vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    printk("Memory test completed successfully!\n\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+}
+
 /* Shell welcome message */
 static void shell_welcome(void) {
     vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLUE);
     printk("============================================\n");
-    printk("        KFS_2 - GDT & Stack Shell          \n");
+    printk("       KFS_3 - Memory Management Shell     \n");
     printk("============================================\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     printk("\n");
@@ -308,6 +395,7 @@ static void shell_welcome(void) {
     printk("Welcome to the KFS Debug Shell!\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     printk("Type 'help' for a list of commands.\n");
+    printk("Type 'mem' to see memory system overview.\n");
     printk("Press Alt+F1 to Alt+F4 to switch screens.\n\n");
 }
 

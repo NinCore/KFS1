@@ -1,4 +1,4 @@
-/* kernel.c - Main kernel entry point for KFS_2 */
+/* kernel.c - Main kernel entry point for KFS_3 */
 
 #include "../include/vga.h"
 #include "../include/types.h"
@@ -8,6 +8,10 @@
 #include "../include/gdt.h"
 #include "../include/stack.h"
 #include "../include/shell.h"
+#include "../include/paging.h"
+#include "../include/kmalloc.h"
+#include "../include/vmalloc.h"
+#include "../include/panic.h"
 
 /* Display welcome screen */
 static void display_welcome(void) {
@@ -138,13 +142,23 @@ void kmain(void) {
     /* Initialize GDT - MANDATORY for KFS_2 */
     gdt_init();
 
+    /* Initialize memory paging - MANDATORY for KFS_3 */
+    paging_init();
+    paging_enable();
+
+    /* Initialize physical memory allocator - MANDATORY for KFS_3 */
+    kmalloc_init();
+
+    /* Initialize virtual memory allocator - MANDATORY for KFS_3 */
+    vmalloc_init();
+
     /* Initialize keyboard */
     keyboard_init();
 
     /* Initialize multiple screens */
     init_screens();
 
-    /* Run the shell - BONUS for KFS_2 */
+    /* Run the shell - BONUS for KFS_3 */
     shell_run();
 
     /* Should never reach here */
