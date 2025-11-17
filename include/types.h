@@ -18,10 +18,9 @@ typedef signed long long   int64_t;
 typedef unsigned int size_t;
 
 /* Boolean type */
-typedef enum {
-    false = 0,
-    true = 1
-} bool;
+typedef unsigned char bool;
+#define false 0
+#define true 1
 
 /* NULL pointer */
 #define NULL ((void*)0)

@@ -31,9 +31,11 @@ KERNEL = kernel.bin
 ISO_DIR = isodir
 ISO = kfs1.iso
 
-.PHONY: all clean iso run
+.PHONY: all clean iso run kernel
 
-all: $(KERNEL)
+all: iso
+
+kernel: $(KERNEL)
 
 # Create build directory
 $(BUILD_DIR):

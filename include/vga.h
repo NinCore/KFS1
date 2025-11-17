@@ -44,4 +44,11 @@ void vga_print(const char *str);
 /* Set color */
 void vga_set_color(vga_color_t fg, vga_color_t bg);
 
+/* Cursor management */
+void vga_enable_cursor(uint8_t cursor_start, uint8_t cursor_end);
+void vga_disable_cursor(void);
+void vga_update_cursor(void);
+void vga_get_cursor_position(size_t *row, size_t *col);
+void vga_set_cursor_position(size_t row, size_t col);
+
 #endif /* VGA_H */

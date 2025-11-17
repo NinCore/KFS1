@@ -6,6 +6,21 @@
 /* VGA buffer address */
 #define VGA_MEMORY 0xB8000
 
+/* VGA hardware ports */
+#define VGA_CTRL_REGISTER 0x3D4
+#define VGA_DATA_REGISTER 0x3D5
+
+/* Port I/O functions */
+static inline void outb(uint16_t port, uint8_t value) {
+    __asm__ volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
+}
+
+static inline uint8_t inb(uint16_t port) {
+    uint8_t value;
+    __asm__ volatile ("inb %1, %0" : "=a"(value) : "Nd"(port));
+    return value;
+}
+
 /* Current position and color */
 static uint16_t *vga_buffer;
 static size_t vga_row;
@@ -28,6 +43,8 @@ void vga_init(void) {
     vga_column = 0;
     vga_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     vga_clear();
+    vga_enable_cursor(0, 15);  /* Enable cursor */
+    vga_update_cursor();
 }
 
 void vga_clear(void) {
@@ -91,6 +108,8 @@ void vga_putchar(char c) {
         vga_scroll();
         vga_row = VGA_HEIGHT - 1;
     }
+
+    vga_update_cursor();
 }
 
 void vga_print(const char *str) {
@@ -98,5 +117,39 @@ void vga_print(const char *str) {
     while (str[i]) {
         vga_putchar(str[i]);
         i++;
+    }
+}
+
+/* Cursor management functions */
+void vga_enable_cursor(uint8_t cursor_start, uint8_t cursor_end) {
+    outb(VGA_CTRL_REGISTER, 0x0A);
+    outb(VGA_DATA_REGISTER, (inb(VGA_DATA_REGISTER) & 0xC0) | cursor_start);
+    outb(VGA_CTRL_REGISTER, 0x0B);
+    outb(VGA_DATA_REGISTER, (inb(VGA_DATA_REGISTER) & 0xE0) | cursor_end);
+}
+
+void vga_disable_cursor(void) {
+    outb(VGA_CTRL_REGISTER, 0x0A);
+    outb(VGA_DATA_REGISTER, 0x20);
+}
+
+void vga_update_cursor(void) {
+    uint16_t pos = vga_row * VGA_WIDTH + vga_column;
+    outb(VGA_CTRL_REGISTER, 0x0F);
+    outb(VGA_DATA_REGISTER, (uint8_t)(pos & 0xFF));
+    outb(VGA_CTRL_REGISTER, 0x0E);
+    outb(VGA_DATA_REGISTER, (uint8_t)((pos >> 8) & 0xFF));
+}
+
+void vga_get_cursor_position(size_t *row, size_t *col) {
+    if (row) *row = vga_row;
+    if (col) *col = vga_column;
+}
+
+void vga_set_cursor_position(size_t row, size_t col) {
+    if (row < VGA_HEIGHT && col < VGA_WIDTH) {
+        vga_row = row;
+        vga_column = col;
+        vga_update_cursor();
     }
 }
