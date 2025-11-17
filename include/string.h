@@ -14,6 +14,9 @@ int strcmp(const char *s1, const char *s2);
 /* Copy string */
 char *strcpy(char *dest, const char *src);
 
+/* Copy string with limit */
+char *strncpy(char *dest, const char *src, size_t n);
+
 /* Set memory to a value */
 void *memset(void *ptr, int value, size_t num);
 

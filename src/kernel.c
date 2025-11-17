@@ -1,10 +1,13 @@
-/* kernel.c - Main kernel entry point with bonus features demo */
+/* kernel.c - Main kernel entry point for KFS_2 */
 
 #include "../include/vga.h"
 #include "../include/types.h"
 #include "../include/printf.h"
 #include "../include/keyboard.h"
 #include "../include/screen.h"
+#include "../include/gdt.h"
+#include "../include/stack.h"
+#include "../include/shell.h"
 
 /* Display welcome screen */
 static void display_welcome(void) {
@@ -171,15 +174,30 @@ static void handle_keyboard(void) {
     }
 }
 
+/* Handle screen switching (called from shell) */
+void handle_screen_switch(int screen_num) {
+    if (screen_num < MAX_SCREENS) {
+        screen_save();
+        screen_switch(screen_num);
+    }
+}
+
 /* Kernel main function */
 void kmain(void) {
     /* Initialize all systems */
     vga_init();
+
+    /* Initialize GDT - MANDATORY for KFS_2 */
+    gdt_init();
+
+    /* Initialize keyboard */
     keyboard_init();
+
+    /* Initialize multiple screens */
     init_screens();
 
-    /* Enter main keyboard handling loop */
-    handle_keyboard();
+    /* Run the shell - BONUS for KFS_2 */
+    shell_run();
 
     /* Should never reach here */
     while (1) {
