@@ -4,6 +4,13 @@ ENTRY(start)
 
 SECTIONS
 {
+    /* GDT must be at address 0x00000800 as per KFS_2 subject */
+    . = 0x00000800;
+
+    .gdt : {
+        *(.gdt)
+    }
+
     /* Kernel starts at 1MB in physical memory */
     . = 0x00100000;
 

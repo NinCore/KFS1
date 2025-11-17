@@ -2,12 +2,12 @@
 
 # Compiler and assembler
 CC = gcc
-AS = nasm
+AS = as
 LD = ld
 
 # Flags as required by the subject
 CFLAGS = -m32 -fno-builtin -fno-exceptions -fno-stack-protector -nostdlib -nodefaultlibs -Wall -Wextra -c
-ASFLAGS = -f elf32
+ASFLAGS = --32
 LDFLAGS = -m elf_i386 -T linker.ld
 
 # Directories
@@ -17,11 +17,11 @@ BUILD_DIR = build
 
 # Source files
 C_SOURCES = $(wildcard $(SRC_DIR)/*.c)
-ASM_SOURCES = $(wildcard $(SRC_DIR)/*.asm)
+ASM_SOURCES = $(wildcard $(SRC_DIR)/*.s)
 
 # Object files
 C_OBJECTS = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(C_SOURCES))
-ASM_OBJECTS = $(patsubst $(SRC_DIR)/%.asm, $(BUILD_DIR)/%.o, $(ASM_SOURCES))
+ASM_OBJECTS = $(patsubst $(SRC_DIR)/%.s, $(BUILD_DIR)/%.o, $(ASM_SOURCES))
 OBJECTS = $(ASM_OBJECTS) $(C_OBJECTS)
 
 # Output kernel binary
@@ -46,7 +46,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -I$(INC_DIR) $< -o $@
 
 # Assemble ASM source files
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.asm | $(BUILD_DIR)
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.s | $(BUILD_DIR)
 	$(AS) $(ASFLAGS) $< -o $@
 
 # Link all object files
