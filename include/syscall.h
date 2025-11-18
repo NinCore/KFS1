@@ -21,6 +21,13 @@
 #define SYS_GETUID  11
 #define SYS_MMAP    12  /* KFS-5 Bonus */
 #define SYS_BRK     13  /* KFS-5 Bonus */
+#define SYS_SOCKET  14  /* KFS-5 MANDATORY - Socket IPC */
+#define SYS_BIND    15  /* KFS-5 MANDATORY - Socket IPC */
+#define SYS_LISTEN  16  /* KFS-5 MANDATORY - Socket IPC */
+#define SYS_ACCEPT  17  /* KFS-5 MANDATORY - Socket IPC */
+#define SYS_CONNECT 18  /* KFS-5 MANDATORY - Socket IPC */
+#define SYS_SEND    19  /* KFS-5 MANDATORY - Socket IPC */
+#define SYS_RECV    20  /* KFS-5 MANDATORY - Socket IPC */
 
 #define MAX_SYSCALLS 256
 

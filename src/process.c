@@ -541,6 +541,118 @@ int sys_brk(uint32_t addr, uint32_t unused1, uint32_t unused2, uint32_t unused3,
     return process_brk(proc, (void *)addr);
 }
 
+/* ===== Process Scheduling (KFS-5 MANDATORY) ===== */
+
+/* Round-robin scheduler - select next process to run */
+void process_schedule(void) {
+    process_t *next = NULL;
+
+    /* Find next READY process in round-robin fashion */
+    if (current_process) {
+        /* Start search from next process after current */
+        bool found_current = false;
+
+        /* First pass: search from current+1 to end */
+        for (int i = 0; i < MAX_PROCESSES; i++) {
+            if (&process_table[i] == current_process) {
+                found_current = true;
+                continue;
+            }
+
+            if (found_current && process_table[i].state == PROCESS_STATE_READY) {
+                next = &process_table[i];
+                break;
+            }
+        }
+
+        /* Second pass: wrap around from beginning if needed */
+        if (!next) {
+            for (int i = 0; i < MAX_PROCESSES; i++) {
+                if (&process_table[i] == current_process) {
+                    break;  /* Stop at current process */
+                }
+
+                if (process_table[i].state == PROCESS_STATE_READY) {
+                    next = &process_table[i];
+                    break;
+                }
+            }
+        }
+
+        /* If current process is still READY, it can continue running */
+        if (!next && current_process->state == PROCESS_STATE_READY) {
+            next = current_process;
+        }
+    } else {
+        /* No current process, find any READY process */
+        for (int i = 0; i < MAX_PROCESSES; i++) {
+            if (process_table[i].state == PROCESS_STATE_READY) {
+                next = &process_table[i];
+                break;
+            }
+        }
+    }
+
+    /* Switch to next process if found and different from current */
+    if (next && next != current_process) {
+        process_switch(next);
+    }
+}
+
+/* Switch to a different process */
+void process_switch(process_t *next) {
+    if (!next) {
+        return;
+    }
+
+    /* Save current process context if there is one */
+    if (current_process && current_process->state == PROCESS_STATE_RUNNING) {
+        /* Mark current process as READY (no longer running) */
+        current_process->state = PROCESS_STATE_READY;
+
+        /* Context is saved by interrupt handler before calling schedule */
+        /* (The interrupt frame contains the saved context) */
+    }
+
+    /* Switch to next process */
+    process_t *prev = current_process;
+    current_process = next;
+    next->state = PROCESS_STATE_RUNNING;
+
+    /* Switch page directory (memory context) */
+    if (next->page_directory) {
+        paging_switch_directory(next->page_directory);
+    }
+
+    /* Process any pending signals for the new process */
+    process_signal_process(next);
+
+    /* Debug output */
+    if (prev) {
+        printk("[SCHED] Context switch: PID %d -> PID %d\n", prev->pid, next->pid);
+    } else {
+        printk("[SCHED] Starting process PID %d\n", next->pid);
+    }
+
+    /* The actual register context switch happens when we return from interrupt */
+    /* The interrupt handler will restore the context from next->context */
+}
+
+/* Set current process (used during initialization) */
+void process_set_current(process_t *proc) {
+    if (current_process && current_process != proc) {
+        current_process->state = PROCESS_STATE_READY;
+    }
+
+    current_process = proc;
+    if (proc) {
+        proc->state = PROCESS_STATE_RUNNING;
+        if (proc->page_directory) {
+            paging_switch_directory(proc->page_directory);
+        }
+    }
+}
+
 /* ===== Exception to Signal Mapping (KFS-5 Bonus) ===== */
 
 /* Exception to signal mapping table */

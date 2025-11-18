@@ -56,6 +56,15 @@ extern int sys_kill(uint32_t pid, uint32_t signal, uint32_t unused1, uint32_t un
 extern int sys_mmap(uint32_t addr, uint32_t length, uint32_t prot, uint32_t flags, uint32_t unused);
 extern int sys_brk(uint32_t addr, uint32_t unused1, uint32_t unused2, uint32_t unused3, uint32_t unused4);
 
+/* Forward declarations for socket syscalls (KFS_5 MANDATORY) */
+extern int sys_socket(uint32_t family, uint32_t type, uint32_t protocol, uint32_t unused1, uint32_t unused2);
+extern int sys_bind(uint32_t sockfd, uint32_t addr_ptr, uint32_t unused1, uint32_t unused2, uint32_t unused3);
+extern int sys_listen(uint32_t sockfd, uint32_t backlog, uint32_t unused1, uint32_t unused2, uint32_t unused3);
+extern int sys_accept(uint32_t sockfd, uint32_t addr_ptr, uint32_t unused1, uint32_t unused2, uint32_t unused3);
+extern int sys_connect(uint32_t sockfd, uint32_t addr_ptr, uint32_t unused1, uint32_t unused2, uint32_t unused3);
+extern int sys_send(uint32_t sockfd, uint32_t buf_ptr, uint32_t len, uint32_t flags, uint32_t unused);
+extern int sys_recv(uint32_t sockfd, uint32_t buf_ptr, uint32_t len, uint32_t flags, uint32_t unused);
+
 /* Syscall dispatcher - called from INT 0x80 */
 void syscall_dispatcher(struct interrupt_frame *frame) {
     /* Syscall number in EAX */
@@ -106,6 +115,17 @@ void syscall_init(void) {
     /* Register memory syscalls (KFS_5 Bonus) */
     syscall_register(SYS_MMAP, sys_mmap);
     syscall_register(SYS_BRK, sys_brk);
+
+    /* Register socket syscalls (KFS_5 MANDATORY) */
+    syscall_register(SYS_SOCKET, sys_socket);
+    syscall_register(SYS_BIND, sys_bind);
+    syscall_register(SYS_LISTEN, sys_listen);
+    syscall_register(SYS_ACCEPT, sys_accept);
+    syscall_register(SYS_CONNECT, sys_connect);
+    syscall_register(SYS_SEND, sys_send);
+    syscall_register(SYS_RECV, sys_recv);
+
+    kernel_info("Syscall system initialized");
 }
 
 /* Register a syscall handler */

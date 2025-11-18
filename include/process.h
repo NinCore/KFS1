@@ -99,6 +99,7 @@ void process_kill(process_t *proc, int signal);
 /* Process scheduling */
 void process_schedule(void);
 process_t *process_get_current(void);
+void process_set_current(process_t *proc);
 void process_switch(process_t *next);
 
 /* Process signal handling */
