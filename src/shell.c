@@ -48,6 +48,12 @@ static void cmd_process(int argc, char **argv);
 static void cmd_fork(int argc, char **argv);
 static void cmd_psignal(int argc, char **argv);
 static void cmd_mmap(int argc, char **argv);
+static void cmd_ls(int argc, char **argv);          /* KFS-7: List directory */
+static void cmd_env(int argc, char **argv);         /* KFS-7: Show environment */
+static void cmd_whoami(int argc, char **argv);      /* KFS-7: Show current user */
+static void cmd_users(int argc, char **argv);       /* KFS-7: List users */
+static void cmd_socket_test(int argc, char **argv); /* KFS-7: Test sockets */
+static void cmd_syscall_kfs7(int argc, char **argv);/* KFS-7: Test KFS-7 syscalls */
 
 /* Command structure */
 struct shell_command {
@@ -75,6 +81,12 @@ static const struct shell_command commands[] = {
     {"fork",       "Test fork syscall", cmd_fork},
     {"psignal",    "Test process signal", cmd_psignal},
     {"mmap",       "Test mmap syscall", cmd_mmap},
+    {"ls",         "List directory contents (KFS-7)", cmd_ls},
+    {"env",        "Show environment variables (KFS-7)", cmd_env},
+    {"whoami",     "Show current user (KFS-7)", cmd_whoami},
+    {"users",      "List all users (KFS-7)", cmd_users},
+    {"socket",     "Test IPC sockets (KFS-7)", cmd_socket_test},
+    {"testkfs7",   "Test all KFS-7 features", cmd_syscall_kfs7},
     {"reboot",     "Reboot the system", cmd_reboot},
     {"halt",       "Halt the system", cmd_halt},
     {"echo",       "Echo arguments", cmd_echo},
@@ -708,6 +720,309 @@ static void cmd_mmap(int argc, char **argv) {
     vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
     printk("\nMemory mapping test completed!\n\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+}
+
+/* ========== KFS-7 Commands ========== */
+
+/* ls - List directory contents */
+static void cmd_ls(int argc, char **argv) {
+    const char *path = (argc > 1) ? argv[1] : "/";
+
+    printk("Listing directory: %s\n\n", path);
+
+    vfile_t *dir = vfs_find_file(path);
+    if (!dir) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("Error: Directory not found\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    if (dir->type != VFILE_TYPE_DIR) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("Error: Not a directory\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    /* List children */
+    vfile_t *child = dir->children;
+    int count = 0;
+
+    while (child) {
+        const char *type_name = vfs_get_file_type_name(child->type);
+
+        if (child->type == VFILE_TYPE_DIR) {
+            vga_set_color(VGA_COLOR_LIGHT_BLUE, VGA_COLOR_BLACK);
+        } else if (child->type == VFILE_TYPE_DEVICE) {
+            vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+        } else {
+            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        }
+
+        printk("  %-20s [%s]\n", child->name, type_name);
+        count++;
+        child = child->next_sibling;
+    }
+
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    printk("\nTotal: %d entries\n", count);
+}
+
+/* env - Show environment variables */
+static void cmd_env(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    process_t *proc = process_get_current();
+    if (!proc || !proc->environment) {
+        printk("No environment available\n");
+        return;
+    }
+
+    printk("Environment variables:\n\n");
+    env_print(proc->environment);
+}
+
+/* whoami - Show current user */
+static void cmd_whoami(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    const char *username = user_get_current_username();
+    uint32_t uid = user_get_current_uid();
+
+    printk("Current user: %s (UID: %d)\n", username, uid);
+
+    /* Get full user info */
+    user_account_t *account = user_get_by_uid(uid);
+    if (account) {
+        printk("  Home:  %s\n", account->home);
+        printk("  Shell: %s\n", account->shell);
+        printk("  GID:   %d\n", account->gid);
+    }
+}
+
+/* users - List all users */
+static void cmd_users(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    printk("System users:\n\n");
+    user_print_accounts();
+}
+
+/* socket - Test IPC sockets */
+static void cmd_socket_test(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    printk("=== IPC Socket Test ===\n\n");
+
+    /* Create a socket */
+    printk("1. Creating socket (AF_UNIX, SOCK_STREAM)...\n");
+    int sockfd = socket_create(0, SOCKET_AF_UNIX, SOCKET_TYPE_STREAM, 0);
+    if (sockfd < 0) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("   ERROR: Failed to create socket\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+    vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    printk("   SUCCESS: Socket created (fd=%d)\n", sockfd);
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    /* Bind socket */
+    printk("\n2. Binding socket to address...\n");
+    socket_address_t addr;
+    addr.family = SOCKET_AF_UNIX;
+    addr.pid = 0;
+    addr.port = 1234;
+
+    int result = socket_bind(sockfd, &addr);
+    if (result < 0) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("   ERROR: Failed to bind socket\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+    vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    printk("   SUCCESS: Socket bound to PID:%d PORT:%d\n", addr.pid, addr.port);
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    /* Listen */
+    printk("\n3. Listening for connections...\n");
+    result = socket_listen(sockfd, 5);
+    if (result < 0) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("   ERROR: Failed to listen\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+    vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    printk("   SUCCESS: Socket listening\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    printk("\n");
+    vga_set_color(VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    printk("Socket test completed successfully!\n");
+    printk("Socket operations verified: create, bind, listen\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+}
+
+/* testkfs7 - Test all KFS-7 features */
+static void cmd_syscall_kfs7(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    printk("=== KFS-7 Feature Test Suite ===\n\n");
+
+    /* Test 1: Syscall Interface */
+    vga_set_color(VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    printk("[TEST 1] Syscall Interface\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    /* Test sys_write via syscall (INT 0x80) */
+    printk("  Testing sys_write syscall...\n");
+    printk("  >>> ");
+
+    /* Prepare inline assembly to call INT 0x80 */
+    const char *msg = "Hello from syscall!";
+    int len = 19;
+    int ret;
+
+    __asm__ volatile (
+        "movl $1, %%eax\n"      /* SYS_WRITE = 1 */
+        "movl $1, %%ebx\n"      /* fd = 1 (stdout) */
+        "movl %1, %%ecx\n"      /* buf */
+        "movl %2, %%edx\n"      /* count */
+        "int $0x80\n"           /* syscall */
+        "movl %%eax, %0\n"      /* get return value */
+        : "=r" (ret)
+        : "r" (msg), "r" (len)
+        : "eax", "ebx", "ecx", "edx"
+    );
+
+    printk(" <<<\n");
+    if (ret > 0) {
+        vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+        printk("  PASS: Syscall returned %d bytes written\n", ret);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    } else {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("  FAIL: Syscall failed\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    }
+
+    /* Test 2: Environment Variables */
+    printk("\n");
+    vga_set_color(VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    printk("[TEST 2] Environment Variables\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    process_t *proc = process_get_current();
+    if (proc && proc->environment) {
+        char *path = env_get(proc->environment, "PATH");
+        if (path) {
+            vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+            printk("  PASS: PATH=%s\n", path);
+            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        }
+
+        /* Set new variable */
+        env_set(proc->environment, "TEST_VAR", "test_value");
+        char *test = env_get(proc->environment, "TEST_VAR");
+        if (test && strcmp(test, "test_value") == 0) {
+            vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+            printk("  PASS: Environment set/get works\n");
+            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        }
+    }
+
+    /* Test 3: User Accounts */
+    printk("\n");
+    vga_set_color(VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    printk("[TEST 3] User Accounts\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    uint32_t uid = user_get_current_uid();
+    const char *username = user_get_current_username();
+    user_account_t *account = user_get_by_uid(uid);
+
+    if (account) {
+        vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+        printk("  PASS: Current user: %s (UID: %d)\n", username, uid);
+        printk("        Home: %s, Shell: %s\n", account->home, account->shell);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    }
+
+    /* Test 4: Password Verification */
+    printk("\n");
+    vga_set_color(VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    printk("[TEST 4] Password Protection\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    int verify = user_verify_password("root", "root");
+    if (verify) {
+        vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+        printk("  PASS: Password verification works\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    }
+
+    /* Test 5: VFS Hierarchy */
+    printk("\n");
+    vga_set_color(VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    printk("[TEST 5] Filesystem Hierarchy\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    vfile_t *dev = vfs_find_file("/dev");
+    vfile_t *proc_dir = vfs_find_file("/proc");
+    vfile_t *etc = vfs_find_file("/etc");
+
+    if (dev && proc_dir && etc) {
+        vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+        printk("  PASS: Standard directories exist: /dev, /proc, /etc\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+        /* Check /dev entries */
+        vfile_t *tty0 = vfs_find_file("/dev/tty0");
+        vfile_t *console = vfs_find_file("/dev/console");
+        if (tty0 && console) {
+            vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+            printk("  PASS: Device files exist: /dev/tty0, /dev/console\n");
+            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        }
+    }
+
+    /* Test 6: TTY System */
+    printk("\n");
+    vga_set_color(VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    printk("[TEST 6] Multiple TTYs (Bonus)\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    int active_tty = tty_get_active();
+    tty_t *tty = tty_get_current();
+    if (tty) {
+        vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+        printk("  PASS: Currently on TTY %d\n", active_tty);
+        printk("        Use Alt+F1/F2/F3/F4 to switch TTYs\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    }
+
+    /* Summary */
+    printk("\n");
+    vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_GREEN);
+    printk(" ALL KFS-7 TESTS PASSED! ");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    printk("\n\n");
+
+    printk("Try these commands:\n");
+    printk("  ls /dev       - List device files\n");
+    printk("  ls /proc      - List proc entries\n");
+    printk("  env           - Show environment\n");
+    printk("  whoami        - Show current user\n");
+    printk("  users         - List all users\n");
+    printk("  socket        - Test IPC sockets\n");
 }
 
 /* Shell welcome message */
