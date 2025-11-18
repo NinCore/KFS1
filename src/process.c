@@ -130,6 +130,9 @@ process_t *process_create(void (*entry_point)(void), uint32_t uid) {
     }
     proc->signal_queue = NULL;
 
+    /* Initialize current working directory (KFS-6) */
+    strcpy(proc->pwd, "/");
+
     return proc;
 }
 
@@ -711,4 +714,32 @@ void process_handle_exception(uint32_t exception_num) {
     } else {
         printk("[EXCEPTION] No signal mapping for exception %d\n", exception_num);
     }
+}
+
+/* ===== Working Directory Functions (KFS-6 MANDATORY) ===== */
+
+/* Get current working directory for a process */
+const char *process_get_pwd(process_t *proc) {
+    if (!proc) {
+        return NULL;
+    }
+    return proc->pwd;
+}
+
+/* Set current working directory for a process */
+int process_set_pwd(process_t *proc, const char *path) {
+    if (!proc || !path) {
+        return -1;
+    }
+
+    /* Validate path length */
+    if (strlen(path) >= sizeof(proc->pwd)) {
+        printk("[PROCESS] Path too long: %s\n", path);
+        return -1;
+    }
+
+    /* Copy the new path */
+    strcpy(proc->pwd, path);
+
+    return 0;
 }

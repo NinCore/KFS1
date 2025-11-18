@@ -31,7 +31,7 @@ KERNEL = kernel.bin
 ISO_DIR = isodir
 ISO = kfs1.iso
 
-.PHONY: all clean iso run kernel
+.PHONY: all clean iso run kernel disk run-disk
 
 all: iso
 
@@ -70,15 +70,31 @@ iso: $(KERNEL)
 run: iso
 	qemu-system-i386 -cdrom $(ISO)
 
+# Create EXT2 disk image for testing filesystem
+disk:
+	@chmod +x create_disk.sh
+	@./create_disk.sh
+
+# Run with QEMU and attach disk image
+run-disk: iso disk
+	qemu-system-i386 -cdrom $(ISO) -drive file=disk.img,format=raw,if=ide
+
 # Clean build files
 clean:
 	rm -rf $(BUILD_DIR) $(KERNEL) $(ISO_DIR) $(ISO)
 
+# Clean everything including disk image
+clean-all: clean
+	rm -f disk.img
+
 # Additional helpful targets
 help:
 	@echo "Available targets:"
-	@echo "  all    - Build the kernel binary (default)"
-	@echo "  iso    - Create bootable ISO image"
-	@echo "  run    - Run kernel in QEMU"
-	@echo "  clean  - Remove all build artifacts"
-	@echo "  help   - Show this help message"
+	@echo "  all       - Build the kernel binary (default)"
+	@echo "  iso       - Create bootable ISO image"
+	@echo "  run       - Run kernel in QEMU"
+	@echo "  disk      - Create EXT2 disk image for testing"
+	@echo "  run-disk  - Run kernel in QEMU with disk attached"
+	@echo "  clean     - Remove all build artifacts"
+	@echo "  clean-all - Remove build artifacts and disk image"
+	@echo "  help      - Show this help message"

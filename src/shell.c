@@ -16,6 +16,9 @@
 #include "../include/syscall.h"
 #include "../include/idt.h"
 #include "../include/process.h"
+#include "../include/vfs.h"
+#include "../include/ide.h"
+#include "../include/ext2.h"
 
 /* Shell state */
 static char shell_buffer[SHELL_BUFFER_SIZE];
@@ -43,6 +46,14 @@ static void cmd_process(int argc, char **argv);
 static void cmd_fork(int argc, char **argv);
 static void cmd_psignal(int argc, char **argv);
 static void cmd_mmap(int argc, char **argv);
+static void cmd_cat(int argc, char **argv);
+static void cmd_pwd(int argc, char **argv);
+static void cmd_cd(int argc, char **argv);
+static void cmd_ls(int argc, char **argv);
+static void cmd_mount(int argc, char **argv);
+static void cmd_umount(int argc, char **argv);
+static void cmd_login(int argc, char **argv);
+static void cmd_whoami(int argc, char **argv);
 
 /* Command structure */
 struct shell_command {
@@ -70,6 +81,14 @@ static const struct shell_command commands[] = {
     {"fork",       "Test fork syscall", cmd_fork},
     {"psignal",    "Test process signal", cmd_psignal},
     {"mmap",       "Test mmap syscall", cmd_mmap},
+    {"cat",        "Display file contents", cmd_cat},
+    {"pwd",        "Print working directory", cmd_pwd},
+    {"cd",         "Change directory", cmd_cd},
+    {"ls",         "List directory contents", cmd_ls},
+    {"mount",      "Mount a filesystem (BONUS)", cmd_mount},
+    {"umount",     "Unmount a filesystem (BONUS)", cmd_umount},
+    {"login",      "Login as a user (BONUS)", cmd_login},
+    {"whoami",     "Show current user (BONUS)", cmd_whoami},
     {"reboot",     "Reboot the system", cmd_reboot},
     {"halt",       "Halt the system", cmd_halt},
     {"echo",       "Echo arguments", cmd_echo},
@@ -705,6 +724,593 @@ static void cmd_mmap(int argc, char **argv) {
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 }
 
+/* ===== Filesystem Commands (KFS-6) ===== */
+
+/* Helper function to resolve path (absolute or relative) */
+static vfs_node_t *resolve_path_from_pwd(const char *path) {
+    char full_path[256];
+
+    /* If absolute path, use it directly */
+    if (path[0] == '/') {
+        return vfs_resolve_path(path);
+    }
+
+    /* Otherwise, resolve relative to current process pwd */
+    process_t *current = process_get_current();
+    const char *pwd = current ? process_get_pwd(current) : "/";
+
+    /* Build full path */
+    if (strcmp(pwd, "/") == 0) {
+        /* Root directory */
+        snprintf(full_path, sizeof(full_path), "/%s", path);
+    } else {
+        /* Other directory */
+        snprintf(full_path, sizeof(full_path), "%s/%s", pwd, path);
+    }
+
+    return vfs_resolve_path(full_path);
+}
+
+/* Cat command - display file contents */
+static void cmd_cat(int argc, char **argv) {
+    if (argc < 2) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("Usage: cat <file>\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    /* Resolve the file path */
+    vfs_node_t *file = resolve_path_from_pwd(argv[1]);
+
+    if (!file) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("cat: %s: No such file or directory\n", argv[1]);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    /* Check if it's a regular file */
+    if (file->type != VFS_FILE_TYPE_REGULAR) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("cat: %s: Not a regular file\n", argv[1]);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    /* Open the file */
+    if (vfs_open(file, 0) != 0) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("cat: %s: Cannot open file\n", argv[1]);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    /* Allocate buffer for reading */
+    char *buffer = kmalloc(file->size + 1);
+    if (!buffer) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("cat: Cannot allocate buffer\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        vfs_close(file);
+        return;
+    }
+
+    /* Read file contents */
+    int bytes_read = vfs_read(file, 0, file->size, buffer);
+    if (bytes_read < 0) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("cat: %s: Read error\n", argv[1]);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        kfree(buffer);
+        vfs_close(file);
+        return;
+    }
+
+    /* Null-terminate the buffer */
+    buffer[bytes_read] = '\0';
+
+    /* Print the contents */
+    printk("%s", buffer);
+
+    /* Clean up */
+    kfree(buffer);
+    vfs_close(file);
+}
+
+/* PWD command - print working directory */
+static void cmd_pwd(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    process_t *current = process_get_current();
+    const char *pwd = current ? process_get_pwd(current) : "/";
+
+    printk("%s\n", pwd);
+}
+
+/* CD command - change directory */
+static void cmd_cd(int argc, char **argv) {
+    const char *path;
+
+    /* If no argument, go to root */
+    if (argc < 2) {
+        path = "/";
+    } else {
+        path = argv[1];
+    }
+
+    /* Resolve the path */
+    vfs_node_t *dir = resolve_path_from_pwd(path);
+
+    if (!dir) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("cd: %s: No such file or directory\n", path);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    /* Check if it's a directory */
+    if (dir->type != VFS_FILE_TYPE_DIRECTORY) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("cd: %s: Not a directory\n", path);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    /* Build the full path for absolute paths, or resolve relative paths */
+    char full_path[256];
+    if (path[0] == '/') {
+        /* Absolute path */
+        strncpy(full_path, path, sizeof(full_path) - 1);
+        full_path[sizeof(full_path) - 1] = '\0';
+    } else {
+        /* Relative path - need to build full path */
+        process_t *current = process_get_current();
+        const char *pwd = current ? process_get_pwd(current) : "/";
+
+        if (strcmp(pwd, "/") == 0) {
+            snprintf(full_path, sizeof(full_path), "/%s", path);
+        } else {
+            snprintf(full_path, sizeof(full_path), "%s/%s", pwd, path);
+        }
+    }
+
+    /* Update current working directory */
+    process_t *current = process_get_current();
+    if (current) {
+        if (process_set_pwd(current, full_path) != 0) {
+            vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+            printk("cd: Cannot change directory\n");
+            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        }
+    } else {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("cd: No current process\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    }
+}
+
+/* LS command - list directory contents */
+static void cmd_ls(int argc, char **argv) {
+    const char *path;
+
+    /* If no argument, list current directory */
+    if (argc < 2) {
+        process_t *current = process_get_current();
+        path = current ? process_get_pwd(current) : "/";
+    } else {
+        path = argv[1];
+    }
+
+    /* Resolve the directory */
+    vfs_node_t *dir = resolve_path_from_pwd(path);
+
+    if (!dir) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("ls: %s: No such file or directory\n", path);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    /* Check if it's a directory */
+    if (dir->type != VFS_FILE_TYPE_DIRECTORY) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("ls: %s: Not a directory\n", path);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    /* List directory entries */
+    printk("\n");
+    uint32_t index = 0;
+    vfs_node_t *entry;
+
+    while ((entry = vfs_readdir(dir, index++)) != NULL) {
+        /* Skip "." and ".." for now */
+        if (strcmp(entry->name, ".") == 0 || strcmp(entry->name, "..") == 0) {
+            continue;
+        }
+
+        /* Color based on file type */
+        if (entry->type == VFS_FILE_TYPE_DIRECTORY) {
+            vga_set_color(VGA_COLOR_LIGHT_BLUE, VGA_COLOR_BLACK);
+        } else {
+            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        }
+
+        printk("  %s", entry->name);
+
+        /* Add / for directories */
+        if (entry->type == VFS_FILE_TYPE_DIRECTORY) {
+            printk("/");
+        }
+
+        /* Show file size for regular files */
+        if (entry->type == VFS_FILE_TYPE_REGULAR) {
+            vga_set_color(VGA_COLOR_DARK_GREY, VGA_COLOR_BLACK);
+            printk(" (%d bytes)", entry->size);
+        }
+
+        printk("\n");
+    }
+
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    printk("\n");
+}
+
+/* ===== Filesystem BONUS Commands (KFS-6) ===== */
+
+/* MOUNT command - mount a filesystem (BONUS) */
+static void cmd_mount(int argc, char **argv) {
+    if (argc < 2) {
+        vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+        printk("Usage:\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        printk("  mount                  - Show all mounted filesystems\n");
+        printk("  mount <device> <path>  - Mount device at path\n");
+        printk("  Example: mount hda1 /mnt\n\n");
+        printk("Available devices:\n");
+        printk("  hda0 - Primary Master (IDE 0:0)\n");
+        printk("  hda1 - Primary Slave (IDE 0:1)\n");
+        printk("  hdb0 - Secondary Master (IDE 1:0)\n");
+        printk("  hdb1 - Secondary Slave (IDE 1:1)\n");
+        return;
+    }
+
+    if (argc == 1) {
+        /* Show mounted filesystems */
+        printk("\nMounted filesystems:\n");
+        printk("  / - Virtual root filesystem\n");
+        /* TODO: List actual mounts from VFS */
+        printk("\n");
+        return;
+    }
+
+    if (argc < 3) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("mount: Missing mount point\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        printk("Usage: mount <device> <path>\n");
+        return;
+    }
+
+    const char *device = argv[1];
+    const char *path = argv[2];
+
+    /* Parse device name */
+    ide_channel_t channel;
+    ide_drive_t drive;
+
+    if (strcmp(device, "hda0") == 0) {
+        channel = IDE_CHANNEL_PRIMARY;
+        drive = IDE_DRIVE_MASTER_IDX;
+    } else if (strcmp(device, "hda1") == 0) {
+        channel = IDE_CHANNEL_PRIMARY;
+        drive = IDE_DRIVE_SLAVE_IDX;
+    } else if (strcmp(device, "hdb0") == 0) {
+        channel = IDE_CHANNEL_SECONDARY;
+        drive = IDE_DRIVE_MASTER_IDX;
+    } else if (strcmp(device, "hdb1") == 0) {
+        channel = IDE_CHANNEL_SECONDARY;
+        drive = IDE_DRIVE_SLAVE_IDX;
+    } else {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("mount: Unknown device '%s'\n", device);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    /* Try to mount EXT2 filesystem */
+    ext2_filesystem_t *fs = kmalloc(sizeof(ext2_filesystem_t));
+    if (!fs) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("mount: Out of memory\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    int result = ext2_init(fs, channel, drive);
+    if (result != 0) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("mount: No EXT2 filesystem on %s\n", device);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        kfree(fs);
+        return;
+    }
+
+    /* Mount the filesystem */
+    if (vfs_mount(path, fs) != 0) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("mount: Failed to mount %s at %s\n", device, path);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        kfree(fs);
+        return;
+    }
+
+    vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    printk("mount: Successfully mounted %s at %s\n", device, path);
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+}
+
+/* UMOUNT command - unmount a filesystem (BONUS) */
+static void cmd_umount(int argc, char **argv) {
+    if (argc < 2) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("Usage: umount <path>\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    const char *path = argv[1];
+
+    /* Cannot unmount root */
+    if (strcmp(path, "/") == 0) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("umount: Cannot unmount root filesystem\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    if (vfs_unmount(path) != 0) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("umount: Failed to unmount %s\n", path);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    printk("umount: Successfully unmounted %s\n", path);
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+}
+
+/* ===== User System BONUS (KFS-6) ===== */
+
+/* Simple user database */
+typedef struct {
+    char username[32];
+    char password[32];
+    uint32_t uid;
+} user_t;
+
+static user_t users[] = {
+    {"root", "root", 0},
+    {"admin", "admin", 1},
+    {"user", "user", 1000},
+    {"guest", "guest", 1001}
+};
+
+#define USER_COUNT (sizeof(users) / sizeof(users[0]))
+
+static uint32_t current_uid = 0;  /* Default: root */
+
+/* LOGIN command - login as a user (BONUS) */
+static void cmd_login(int argc, char **argv) {
+    if (argc < 2) {
+        vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+        printk("Usage: login <username>\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        printk("Available users: root, admin, user, guest\n");
+        printk("Password for all users is same as username\n");
+        return;
+    }
+
+    const char *username = argv[1];
+    const char *password = (argc >= 3) ? argv[2] : username;  /* Default: password = username */
+
+    /* Find user */
+    for (uint32_t i = 0; i < USER_COUNT; i++) {
+        if (strcmp(users[i].username, username) == 0) {
+            /* Check password */
+            if (strcmp(users[i].password, password) == 0) {
+                current_uid = users[i].uid;
+
+                vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+                printk("Login successful! Welcome %s (UID: %d)\n", username, current_uid);
+                vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+                /* Update current process UID */
+                process_t *proc = process_get_current();
+                if (proc) {
+                    proc->uid = current_uid;
+                }
+
+                return;
+            } else {
+                vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+                printk("Login failed: Incorrect password\n");
+                vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+                return;
+            }
+        }
+    }
+
+    vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+    printk("Login failed: User '%s' not found\n", username);
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+}
+
+/* WHOAMI command - show current user (BONUS) */
+static void cmd_whoami(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    /* Find current user by UID */
+    for (uint32_t i = 0; i < USER_COUNT; i++) {
+        if (users[i].uid == current_uid) {
+            printk("%s (UID: %d)\n", users[i].username, current_uid);
+            return;
+        }
+    }
+
+    printk("unknown (UID: %d)\n", current_uid);
+}
+
+/* Dummy entry point for shell process (never actually called) */
+static void shell_process_entry(void) {
+    /* This function is never called - the shell runs in kernel mode
+     * We just need a process context for commands like cd/pwd */
+    while (1) {
+        __asm__ volatile("hlt");
+    }
+}
+
+/* Create shell process for context */
+static void shell_create_process(void) {
+    process_t *shell_proc = process_create(shell_process_entry, 0);  /* UID 0 = root initially */
+    if (shell_proc) {
+        /* Set shell process as current so cd/pwd/etc work */
+        process_set_current(shell_proc);
+    }
+}
+
+/* Login screen - prompt for username and password */
+static int shell_login(void) {
+    char username[32];
+    char password[32];
+    int username_pos = 0;
+    int password_pos = 0;
+    bool entering_password = false;
+
+    /* Clear screen and show login prompt */
+    vga_clear();
+    vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLUE);
+    printk("============================================\n");
+    printk("            KFS Login Screen                \n");
+    printk("============================================\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    printk("\n");
+    printk("Available users: root, admin, user, guest\n");
+    printk("Default password = username\n\n");
+
+    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    printk("Username: ");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    /* Login loop */
+    while (1) {
+        if (keyboard_haskey()) {
+            int c = keyboard_getchar();
+            if (c == 0) continue;
+
+            if (!entering_password) {
+                /* Entering username */
+                if (c == '\n') {
+                    username[username_pos] = '\0';
+                    if (username_pos > 0) {
+                        /* Move to password */
+                        printk("\n");
+                        vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+                        printk("Password: ");
+                        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+                        entering_password = true;
+                    } else {
+                        printk("\n");
+                        vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+                        printk("Username: ");
+                        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+                    }
+                } else if (c == KEY_BACKSPACE || c == '\b') {
+                    if (username_pos > 0) {
+                        username_pos--;
+                        username[username_pos] = '\0';
+                        size_t row, col;
+                        vga_get_cursor_position(&row, &col);
+                        if (col > 0) {
+                            vga_set_cursor_position(row, col - 1);
+                            vga_putchar(' ');
+                            vga_set_cursor_position(row, col - 1);
+                        }
+                    }
+                } else if (c >= 32 && c <= 126 && username_pos < 31) {
+                    username[username_pos++] = c;
+                    vga_putchar(c);
+                }
+            } else {
+                /* Entering password */
+                if (c == '\n') {
+                    password[password_pos] = '\0';
+                    printk("\n\n");
+
+                    /* Check credentials */
+                    for (uint32_t i = 0; i < USER_COUNT; i++) {
+                        if (strcmp(users[i].username, username) == 0 &&
+                            strcmp(users[i].password, password) == 0) {
+                            /* Login successful */
+                            current_uid = users[i].uid;
+
+                            vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+                            printk("Login successful! Welcome %s\n\n", username);
+                            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+                            /* Update current process UID */
+                            process_t *proc = process_get_current();
+                            if (proc) {
+                                proc->uid = current_uid;
+                            }
+
+                            return 0;  /* Success */
+                        }
+                    }
+
+                    /* Login failed */
+                    vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+                    printk("Login failed! Invalid username or password\n\n");
+                    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+                    /* Reset and try again */
+                    username_pos = 0;
+                    password_pos = 0;
+                    entering_password = false;
+
+                    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+                    printk("Username: ");
+                    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+                } else if (c == KEY_BACKSPACE || c == '\b') {
+                    if (password_pos > 0) {
+                        password_pos--;
+                        password[password_pos] = '\0';
+                        size_t row, col;
+                        vga_get_cursor_position(&row, &col);
+                        if (col > 0) {
+                            vga_set_cursor_position(row, col - 1);
+                            vga_putchar(' ');
+                            vga_set_cursor_position(row, col - 1);
+                        }
+                    }
+                } else if (c >= 32 && c <= 126 && password_pos < 31) {
+                    password[password_pos++] = c;
+                    /* Show asterisk instead of actual character */
+                    vga_putchar('*');
+                }
+            }
+        } else {
+            __asm__ volatile("hlt");
+        }
+    }
+}
+
 /* Shell welcome message */
 static void shell_welcome(void) {
     vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLUE);
@@ -725,6 +1331,14 @@ static void shell_welcome(void) {
 /* Run the shell */
 void shell_run(void) {
     shell_init();
+
+    /* Create shell process for context (needed for cd/pwd/etc) */
+    shell_create_process();
+
+    /* Show login screen */
+    shell_login();
+
+    /* Show welcome message */
     shell_welcome();
     shell_prompt();
 
