@@ -21,8 +21,14 @@ struct idt_ptr {
 } __attribute__((packed));
 
 /* Interrupt frame pushed by CPU on interrupt */
+/* CRITICAL: Order must match the actual stack layout (last pushed = first in struct) */
 struct interrupt_frame {
-    /* Pushed by pushal in interrupt.s */
+    /* Pushed by interrupt.s AFTER pushal (last pushed, lowest address) */
+    uint32_t gs;
+    uint32_t fs;
+    uint32_t es;
+    uint32_t ds;
+    /* Pushed by pushal in interrupt.s (EDI pushed last, lowest address of pushal) */
     uint32_t edi;
     uint32_t esi;
     uint32_t ebp;
@@ -30,21 +36,16 @@ struct interrupt_frame {
     uint32_t ebx;
     uint32_t edx;
     uint32_t ecx;
-    uint32_t eax;
-    /* Pushed by interrupt.s */
-    uint32_t ds;
-    uint32_t es;
-    uint32_t fs;
-    uint32_t gs;
-    /* Pushed by ISR/IRQ stub */
+    uint32_t eax;      /* EAX pushed first by pushal, highest address */
+    /* Pushed by ISR/IRQ stub (before pushal) */
     uint32_t int_no;         /* Interrupt number */
     uint32_t err_code;       /* Error code (if applicable) */
-    /* Pushed by CPU on interrupt */
+    /* Pushed by CPU on interrupt (first pushed, highest address) */
     uint32_t eip;
     uint32_t cs;
     uint32_t eflags;
-    uint32_t user_esp;
-    uint32_t user_ss;
+    uint32_t user_esp;       /* Only if privilege changed */
+    uint32_t user_ss;        /* Only if privilege changed */
 } __attribute__((packed));
 
 /* Number of IDT entries (0-255) */

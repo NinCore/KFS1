@@ -78,31 +78,6 @@ static void save_context_from_frame(struct process_context *ctx, struct interrup
     }
 }
 
-/* Helper function to restore process context to interrupt frame */
-static void restore_context_to_frame(struct interrupt_frame *frame, struct process_context *ctx) {
-    /* Restore general purpose registers */
-    frame->eax = ctx->eax;
-    frame->ebx = ctx->ebx;
-    frame->ecx = ctx->ecx;
-    frame->edx = ctx->edx;
-    frame->esi = ctx->esi;
-    frame->edi = ctx->edi;
-    frame->ebp = ctx->ebp;
-    frame->esp = ctx->esp;
-
-    /* Restore instruction pointer and flags */
-    frame->eip = ctx->eip;
-    frame->eflags = ctx->eflags;
-
-    /* Restore segment registers */
-    frame->cs = ctx->cs;
-    frame->ds = ctx->ds;
-    frame->es = ctx->es;
-    frame->fs = ctx->fs;
-    frame->gs = ctx->gs;
-    frame->user_ss = ctx->ss;
-}
-
 /* Syscall dispatcher - called from INT 0x80 */
 void syscall_dispatcher(struct interrupt_frame *frame) {
     /* Syscall number in EAX */
