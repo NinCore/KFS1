@@ -54,7 +54,9 @@ context_switch:
     /* Restore new context */
     movl %edx, %eax         /* to context */
 
-    /* Restore segment registers */
+    /* Restore segment registers (except CS which requires far jump) */
+    movw 50(%eax), %cx      /* ss - restore FIRST before changing ESP */
+    movw %cx, %ss
     movw 42(%eax), %cx      /* ds */
     movw %cx, %ds
     movw 44(%eax), %cx      /* es */
