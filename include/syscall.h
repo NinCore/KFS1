@@ -16,6 +16,9 @@
 #define SYS_SLEEP   6
 #define SYS_SIGNAL  7
 #define SYS_KILL    8
+#define SYS_FORK    9
+#define SYS_WAIT    10
+#define SYS_GETUID  11
 
 #define MAX_SYSCALLS 256
 
