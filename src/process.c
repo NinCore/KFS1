@@ -264,7 +264,8 @@ void process_kill(uint32_t pid, int signal) {
 
 /* Exec function - load and execute a function as a process */
 void exec_fn(uint32_t addr, void (*function)(void), uint32_t size) {
-    printk("[EXEC] Loading function at 0x%x (size=%d)\n", addr, size);
+    (void)size;  /* Unused - we map the kernel function directly */
+    printk("[EXEC] Loading function at 0x%x\n", addr);
 
     /* Create new process */
     struct process *proc = process_create(function, 0);
@@ -273,18 +274,17 @@ void exec_fn(uint32_t addr, void (*function)(void), uint32_t size) {
         return;
     }
 
-    /* Copy function code to process memory */
-    if (size > 0 && addr != 0) {
-        /* Get physical address of process code page */
-        uint32_t phys_addr = paging_get_physical_address_dir(
-            proc->memory.page_directory, proc->memory.code_start);
-        if (phys_addr) {
-            /* Copy directly to physical address */
-            memcpy((void*)phys_addr, (void*)addr, size);
-            proc->memory.code_end = proc->memory.code_start + size;
-        } else {
-            printk("[EXEC] Failed to get physical address for code\n");
-        }
+    /* Map the kernel function page directly into process space */
+    /* Get physical address of the function in kernel space */
+    uint32_t func_phys = paging_get_physical_address(addr);
+    if (func_phys) {
+        /* Remap PROCESS_CODE_START to point to the same physical page as the function */
+        paging_map_page_dir(proc->memory.page_directory, proc->memory.code_start,
+                            func_phys, PAGE_PRESENT | PAGE_WRITE);
+        proc->memory.code_end = proc->memory.code_start + PAGE_SIZE;
+        printk("[EXEC] Mapped kernel function (phys=0x%x) to process code space\n", func_phys);
+    } else {
+        printk("[EXEC] Failed to get physical address of function\n");
     }
 
     /* Add to scheduler */
