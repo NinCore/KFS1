@@ -24,6 +24,7 @@ void tty_init(void) {
         ttys[i].cursor_x = 0;
         ttys[i].cursor_y = 0;
         ttys[i].logged_in_uid = 0xFFFFFFFF;  /* Not logged in */
+        ttys[i].login_required = (i > 0) ? 1 : 0;  /* TTY 0 gets first login, others need login */
 
         /* Initialize buffer with blank spaces */
         uint16_t blank = vga_make_entry(' ', vga_make_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
@@ -112,6 +113,16 @@ void tty_switch(int tty_num) {
 
     /* Update cursor */
     tty_update_cursor(active_tty);
+
+    /* Check if new TTY requires login */
+    if (ttys[active_tty].login_required && ttys[active_tty].logged_in_uid == 0xFFFFFFFF) {
+        /* Show login prompt for this TTY */
+        extern int login_interactive(void);
+        printk("\n\n=== TTY %d - Login Required ===\n\n", active_tty);
+        if (login_interactive() == 0) {
+            ttys[active_tty].login_required = 0;  /* Login successful */
+        }
+    }
 
     /* Print notification at bottom of screen */
     char msg[32] = "[ Switched to TTY ";

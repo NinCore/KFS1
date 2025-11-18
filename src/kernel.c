@@ -241,11 +241,17 @@ void kmain(void) {
     /* Initialize multiple screens */
     init_screens();
 
-    /* Show login prompt - MANDATORY for KFS_7 */
+    /* Show login prompt for TTY 0 - MANDATORY for KFS_7 */
     printk("\n");
-    printk("=== KFS-7: User Login Required ===\n\n");
+    printk("=== TTY 0 - Login Required ===\n\n");
     if (login_interactive() < 0) {
         printk("\n[KERNEL] Login failed. Starting shell anyway...\n\n");
+    } else {
+        /* Mark TTY 0 as logged in */
+        tty_t *tty0 = tty_get(0);
+        if (tty0) {
+            tty0->login_required = 0;
+        }
     }
 
     /* Run the shell - BONUS for KFS_3 */

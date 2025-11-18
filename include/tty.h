@@ -41,6 +41,7 @@ typedef struct tty {
     /* User logged in to this TTY */
     uint32_t logged_in_uid;
     char logged_in_user[32];
+    int login_required;  /* 1 if login prompt should be shown */
 
 } tty_t;
 
