@@ -25,7 +25,7 @@ struct process_context {
     uint32_t esi, edi, ebp, esp;
     uint32_t eip;
     uint32_t eflags;
-    uint32_t cs, ds, es, fs, gs, ss;
+    uint16_t cs, ds, es, fs, gs, ss;  /* Segments are 16-bit */
 } __attribute__((packed));
 
 /* Signal queue entry */
