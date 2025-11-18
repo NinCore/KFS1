@@ -52,11 +52,9 @@ context_switch:
 
 .skip_save:
     /* Restore new context */
-    movl %edx, %eax         /* to context */
+    movl %edx, %eax         /* EAX now points to context structure */
 
-    /* Restore segment registers (except CS which requires far jump) */
-    movw 50(%eax), %cx      /* ss - restore FIRST before changing ESP */
-    movw %cx, %ss
+    /* Restore data segment registers (use CX as temporary) */
     movw 42(%eax), %cx      /* ds */
     movw %cx, %ds
     movw 44(%eax), %cx      /* es */
@@ -66,24 +64,35 @@ context_switch:
     movw 48(%eax), %cx      /* gs */
     movw %cx, %gs
 
-    /* Restore general purpose registers */
-    movl 4(%eax), %ebx
-    movl 8(%eax), %ecx
-    movl 12(%eax), %edx
-    movl 16(%eax), %esi
-    movl 20(%eax), %edi
-    movl 24(%eax), %ebp
-    movl 28(%eax), %esp
+    /* Restore general purpose registers (NOT ECX, ESP, EAX yet!) */
+    movl 4(%eax), %ebx      /* ebx */
+    movl 12(%eax), %edx     /* edx */
+    movl 16(%eax), %esi     /* esi */
+    movl 20(%eax), %edi     /* edi */
+    movl 24(%eax), %ebp     /* ebp */
 
-    /* Push EFLAGS for restoration */
-    pushl 36(%eax)
-    popfl
+    /* CRITICAL: Restore SS and ESP atomically */
+    /* Intel disables interrupts after MOV to SS for one instruction */
+    movw 50(%eax), %cx      /* Load new SS value */
+    movw %cx, %ss           /* Change SS - interrupts disabled for next instruction */
+    movl 28(%eax), %esp     /* Change ESP immediately - atomic with SS change */
 
-    /* Jump to new EIP */
-    movl 32(%eax), %ecx     /* EIP */
-    movl 0(%eax), %eax      /* Restore eax last */
+    /* Now we have new stack, but can still use EAX to read from context! */
+    /* Restore remaining registers */
+    movl 8(%eax), %ecx      /* Restore ECX */
 
-    jmp *%ecx               /* Jump to new process */
+    /* Restore EFLAGS - must use stack */
+    pushl 36(%eax)          /* Push EFLAGS on NEW stack */
+
+    /* Get EIP for jump */
+    movl 32(%eax), %edx     /* Load EIP into EDX */
+
+    /* Finally restore EAX */
+    movl 0(%eax), %eax      /* Restore EAX - lose pointer to context */
+
+    /* Restore EFLAGS and jump */
+    popfl                   /* Restore EFLAGS from stack */
+    jmp *%edx               /* Jump to new EIP */
 
 /* Simpler version - switch_to_process */
 /* void switch_to_process(struct process_context *from, struct process_context *to) */

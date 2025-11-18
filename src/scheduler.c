@@ -124,6 +124,13 @@ void scheduler_run(void) {
     /* Deliver any pending signals */
     process_deliver_signals(next);
 
+    /* Debug: Print context before switch */
+    printk("[SCHEDULER] Switching to PID=%d\n", next->pid);
+    printk("  Target context: EIP=0x%x ESP=0x%x EBP=0x%x\n",
+           next->context.eip, next->context.esp, next->context.ebp);
+    printk("  Target segments: CS=0x%x DS=0x%x SS=0x%x\n",
+           next->context.cs, next->context.ds, next->context.ss);
+
     /* Perform context switch */
     if (prev) {
         context_switch(&prev->context, &next->context);

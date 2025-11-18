@@ -120,6 +120,12 @@ struct process *process_create(void (*entry_point)(void), uint32_t uid) {
     }
 
     printk("[PROCESS] Created process PID=%d\n", pid);
+    printk("  Context: EIP=0x%x ESP=0x%x EBP=0x%x\n",
+           proc->context.eip, proc->context.esp, proc->context.ebp);
+    printk("  Context: ESI=0x%x EDI=0x%x\n",
+           proc->context.esi, proc->context.edi);
+    printk("  Segments: CS=0x%x DS=0x%x SS=0x%x\n",
+           proc->context.cs, proc->context.ds, proc->context.ss);
 
     return proc;
 }
