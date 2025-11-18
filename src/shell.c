@@ -1166,6 +1166,151 @@ static void cmd_whoami(int argc, char **argv) {
     printk("unknown (UID: %d)\n", current_uid);
 }
 
+/* Dummy entry point for shell process (never actually called) */
+static void shell_process_entry(void) {
+    /* This function is never called - the shell runs in kernel mode
+     * We just need a process context for commands like cd/pwd */
+    while (1) {
+        __asm__ volatile("hlt");
+    }
+}
+
+/* Create shell process for context */
+static void shell_create_process(void) {
+    process_t *shell_proc = process_create(shell_process_entry, 0);  /* UID 0 = root initially */
+    if (shell_proc) {
+        /* Set shell process as current so cd/pwd/etc work */
+        process_set_current(shell_proc);
+    }
+}
+
+/* Login screen - prompt for username and password */
+static int shell_login(void) {
+    char username[32];
+    char password[32];
+    int username_pos = 0;
+    int password_pos = 0;
+    bool entering_password = false;
+
+    /* Clear screen and show login prompt */
+    vga_clear();
+    vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLUE);
+    printk("============================================\n");
+    printk("            KFS Login Screen                \n");
+    printk("============================================\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    printk("\n");
+    printk("Available users: root, admin, user, guest\n");
+    printk("Default password = username\n\n");
+
+    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    printk("Username: ");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    /* Login loop */
+    while (1) {
+        if (keyboard_haskey()) {
+            int c = keyboard_getchar();
+            if (c == 0) continue;
+
+            if (!entering_password) {
+                /* Entering username */
+                if (c == '\n') {
+                    username[username_pos] = '\0';
+                    if (username_pos > 0) {
+                        /* Move to password */
+                        printk("\n");
+                        vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+                        printk("Password: ");
+                        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+                        entering_password = true;
+                    } else {
+                        printk("\n");
+                        vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+                        printk("Username: ");
+                        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+                    }
+                } else if (c == KEY_BACKSPACE || c == '\b') {
+                    if (username_pos > 0) {
+                        username_pos--;
+                        username[username_pos] = '\0';
+                        size_t row, col;
+                        vga_get_cursor_position(&row, &col);
+                        if (col > 0) {
+                            vga_set_cursor_position(row, col - 1);
+                            vga_putchar(' ');
+                            vga_set_cursor_position(row, col - 1);
+                        }
+                    }
+                } else if (c >= 32 && c <= 126 && username_pos < 31) {
+                    username[username_pos++] = c;
+                    vga_putchar(c);
+                }
+            } else {
+                /* Entering password */
+                if (c == '\n') {
+                    password[password_pos] = '\0';
+                    printk("\n\n");
+
+                    /* Check credentials */
+                    for (uint32_t i = 0; i < USER_COUNT; i++) {
+                        if (strcmp(users[i].username, username) == 0 &&
+                            strcmp(users[i].password, password) == 0) {
+                            /* Login successful */
+                            current_uid = users[i].uid;
+
+                            vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+                            printk("Login successful! Welcome %s\n\n", username);
+                            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+                            /* Update current process UID */
+                            process_t *proc = process_get_current();
+                            if (proc) {
+                                proc->uid = current_uid;
+                            }
+
+                            return 0;  /* Success */
+                        }
+                    }
+
+                    /* Login failed */
+                    vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+                    printk("Login failed! Invalid username or password\n\n");
+                    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+                    /* Reset and try again */
+                    username_pos = 0;
+                    password_pos = 0;
+                    entering_password = false;
+
+                    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+                    printk("Username: ");
+                    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+                } else if (c == KEY_BACKSPACE || c == '\b') {
+                    if (password_pos > 0) {
+                        password_pos--;
+                        password[password_pos] = '\0';
+                        size_t row, col;
+                        vga_get_cursor_position(&row, &col);
+                        if (col > 0) {
+                            vga_set_cursor_position(row, col - 1);
+                            vga_putchar(' ');
+                            vga_set_cursor_position(row, col - 1);
+                        }
+                    }
+                } else if (c >= 32 && c <= 126 && password_pos < 31) {
+                    password[password_pos++] = c;
+                    /* Show asterisk instead of actual character */
+                    vga_putchar('*');
+                }
+            }
+        } else {
+            __asm__ volatile("hlt");
+        }
+    }
+}
+
 /* Shell welcome message */
 static void shell_welcome(void) {
     vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLUE);
@@ -1186,6 +1331,14 @@ static void shell_welcome(void) {
 /* Run the shell */
 void shell_run(void) {
     shell_init();
+
+    /* Create shell process for context (needed for cd/pwd/etc) */
+    shell_create_process();
+
+    /* Show login screen */
+    shell_login();
+
+    /* Show welcome message */
     shell_welcome();
     shell_prompt();
 
