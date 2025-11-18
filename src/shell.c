@@ -17,6 +17,8 @@
 #include "../include/idt.h"
 #include "../include/process.h"
 #include "../include/vfs.h"
+#include "../include/ide.h"
+#include "../include/ext2.h"
 
 /* Shell state */
 static char shell_buffer[SHELL_BUFFER_SIZE];
@@ -48,6 +50,10 @@ static void cmd_cat(int argc, char **argv);
 static void cmd_pwd(int argc, char **argv);
 static void cmd_cd(int argc, char **argv);
 static void cmd_ls(int argc, char **argv);
+static void cmd_mount(int argc, char **argv);
+static void cmd_umount(int argc, char **argv);
+static void cmd_login(int argc, char **argv);
+static void cmd_whoami(int argc, char **argv);
 
 /* Command structure */
 struct shell_command {
@@ -79,6 +85,10 @@ static const struct shell_command commands[] = {
     {"pwd",        "Print working directory", cmd_pwd},
     {"cd",         "Change directory", cmd_cd},
     {"ls",         "List directory contents", cmd_ls},
+    {"mount",      "Mount a filesystem (BONUS)", cmd_mount},
+    {"umount",     "Unmount a filesystem (BONUS)", cmd_umount},
+    {"login",      "Login as a user (BONUS)", cmd_login},
+    {"whoami",     "Show current user (BONUS)", cmd_whoami},
     {"reboot",     "Reboot the system", cmd_reboot},
     {"halt",       "Halt the system", cmd_halt},
     {"echo",       "Echo arguments", cmd_echo},
@@ -947,6 +957,213 @@ static void cmd_ls(int argc, char **argv) {
 
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     printk("\n");
+}
+
+/* ===== Filesystem BONUS Commands (KFS-6) ===== */
+
+/* MOUNT command - mount a filesystem (BONUS) */
+static void cmd_mount(int argc, char **argv) {
+    if (argc < 2) {
+        vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+        printk("Usage:\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        printk("  mount                  - Show all mounted filesystems\n");
+        printk("  mount <device> <path>  - Mount device at path\n");
+        printk("  Example: mount hda1 /mnt\n\n");
+        printk("Available devices:\n");
+        printk("  hda0 - Primary Master (IDE 0:0)\n");
+        printk("  hda1 - Primary Slave (IDE 0:1)\n");
+        printk("  hdb0 - Secondary Master (IDE 1:0)\n");
+        printk("  hdb1 - Secondary Slave (IDE 1:1)\n");
+        return;
+    }
+
+    if (argc == 1) {
+        /* Show mounted filesystems */
+        printk("\nMounted filesystems:\n");
+        printk("  / - Virtual root filesystem\n");
+        /* TODO: List actual mounts from VFS */
+        printk("\n");
+        return;
+    }
+
+    if (argc < 3) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("mount: Missing mount point\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        printk("Usage: mount <device> <path>\n");
+        return;
+    }
+
+    const char *device = argv[1];
+    const char *path = argv[2];
+
+    /* Parse device name */
+    ide_channel_t channel;
+    ide_drive_t drive;
+
+    if (strcmp(device, "hda0") == 0) {
+        channel = IDE_CHANNEL_PRIMARY;
+        drive = IDE_DRIVE_MASTER_IDX;
+    } else if (strcmp(device, "hda1") == 0) {
+        channel = IDE_CHANNEL_PRIMARY;
+        drive = IDE_DRIVE_SLAVE_IDX;
+    } else if (strcmp(device, "hdb0") == 0) {
+        channel = IDE_CHANNEL_SECONDARY;
+        drive = IDE_DRIVE_MASTER_IDX;
+    } else if (strcmp(device, "hdb1") == 0) {
+        channel = IDE_CHANNEL_SECONDARY;
+        drive = IDE_DRIVE_SLAVE_IDX;
+    } else {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("mount: Unknown device '%s'\n", device);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    /* Try to mount EXT2 filesystem */
+    ext2_filesystem_t *fs = kmalloc(sizeof(ext2_filesystem_t));
+    if (!fs) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("mount: Out of memory\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    int result = ext2_init(fs, channel, drive);
+    if (result != 0) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("mount: No EXT2 filesystem on %s\n", device);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        kfree(fs);
+        return;
+    }
+
+    /* Mount the filesystem */
+    if (vfs_mount(path, fs) != 0) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("mount: Failed to mount %s at %s\n", device, path);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        kfree(fs);
+        return;
+    }
+
+    vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    printk("mount: Successfully mounted %s at %s\n", device, path);
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+}
+
+/* UMOUNT command - unmount a filesystem (BONUS) */
+static void cmd_umount(int argc, char **argv) {
+    if (argc < 2) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("Usage: umount <path>\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    const char *path = argv[1];
+
+    /* Cannot unmount root */
+    if (strcmp(path, "/") == 0) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("umount: Cannot unmount root filesystem\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    if (vfs_unmount(path) != 0) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("umount: Failed to unmount %s\n", path);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    printk("umount: Successfully unmounted %s\n", path);
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+}
+
+/* ===== User System BONUS (KFS-6) ===== */
+
+/* Simple user database */
+typedef struct {
+    char username[32];
+    char password[32];
+    uint32_t uid;
+} user_t;
+
+static user_t users[] = {
+    {"root", "root", 0},
+    {"admin", "admin", 1},
+    {"user", "user", 1000},
+    {"guest", "guest", 1001}
+};
+
+#define USER_COUNT (sizeof(users) / sizeof(users[0]))
+
+static uint32_t current_uid = 0;  /* Default: root */
+
+/* LOGIN command - login as a user (BONUS) */
+static void cmd_login(int argc, char **argv) {
+    if (argc < 2) {
+        vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+        printk("Usage: login <username>\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        printk("Available users: root, admin, user, guest\n");
+        printk("Password for all users is same as username\n");
+        return;
+    }
+
+    const char *username = argv[1];
+    const char *password = (argc >= 3) ? argv[2] : username;  /* Default: password = username */
+
+    /* Find user */
+    for (uint32_t i = 0; i < USER_COUNT; i++) {
+        if (strcmp(users[i].username, username) == 0) {
+            /* Check password */
+            if (strcmp(users[i].password, password) == 0) {
+                current_uid = users[i].uid;
+
+                vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+                printk("Login successful! Welcome %s (UID: %d)\n", username, current_uid);
+                vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+                /* Update current process UID */
+                process_t *proc = process_get_current();
+                if (proc) {
+                    proc->uid = current_uid;
+                }
+
+                return;
+            } else {
+                vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+                printk("Login failed: Incorrect password\n");
+                vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+                return;
+            }
+        }
+    }
+
+    vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+    printk("Login failed: User '%s' not found\n", username);
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+}
+
+/* WHOAMI command - show current user (BONUS) */
+static void cmd_whoami(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    /* Find current user by UID */
+    for (uint32_t i = 0; i < USER_COUNT; i++) {
+        if (users[i].uid == current_uid) {
+            printk("%s (UID: %d)\n", users[i].username, current_uid);
+            return;
+        }
+    }
+
+    printk("unknown (UID: %d)\n", current_uid);
 }
 
 /* Shell welcome message */

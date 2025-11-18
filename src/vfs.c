@@ -396,11 +396,207 @@ void vfs_print_tree(vfs_node_t *node, int depth) {
     }
 }
 
+/* Create a virtual directory node in memory */
+static vfs_node_t *vfs_create_virtual_dir(const char *name) {
+    vfs_node_t *node = kmalloc(sizeof(vfs_node_t));
+    if (!node) {
+        return NULL;
+    }
+
+    memset(node, 0, sizeof(vfs_node_t));
+    strncpy(node->name, name, 255);
+    node->name[255] = '\0';
+    node->type = VFS_FILE_TYPE_DIRECTORY;
+    node->size = 0;
+    node->inode = 0;
+    node->uid = 0;
+    node->gid = 0;
+    node->mode = 0755;
+
+    return node;
+}
+
+/* Virtual file content storage */
+typedef struct virtual_file_data {
+    char *content;
+    uint32_t size;
+} virtual_file_data_t;
+
+/* Read from virtual file */
+static int vfs_virtual_read(vfs_node_t *node, uint32_t offset, uint32_t size, void *buffer) {
+    if (!node || !buffer) {
+        return -1;
+    }
+
+    /* Get file data from the inode field (we reuse it as a pointer) */
+    virtual_file_data_t *data = (virtual_file_data_t *)(uintptr_t)node->inode;
+    if (!data || !data->content) {
+        return 0;
+    }
+
+    if (offset >= data->size) {
+        return 0;
+    }
+
+    uint32_t to_read = size;
+    if (offset + to_read > data->size) {
+        to_read = data->size - offset;
+    }
+
+    memcpy(buffer, data->content + offset, to_read);
+    return to_read;
+}
+
+/* Create a virtual file node in memory */
+static vfs_node_t *vfs_create_virtual_file(const char *name, const char *content) {
+    vfs_node_t *node = kmalloc(sizeof(vfs_node_t));
+    if (!node) {
+        return NULL;
+    }
+
+    memset(node, 0, sizeof(vfs_node_t));
+    strncpy(node->name, name, 255);
+    node->name[255] = '\0';
+    node->type = VFS_FILE_TYPE_REGULAR;
+    node->uid = 0;
+    node->gid = 0;
+    node->mode = 0644;
+
+    /* Store file content */
+    if (content) {
+        virtual_file_data_t *data = kmalloc(sizeof(virtual_file_data_t));
+        if (data) {
+            data->size = strlen(content);
+            data->content = kmalloc(data->size + 1);
+            if (data->content) {
+                strcpy(data->content, content);
+                node->size = data->size;
+                node->inode = (uint32_t)(uintptr_t)data;  /* Store pointer in inode field */
+                node->read = vfs_virtual_read;
+            } else {
+                kfree(data);
+            }
+        }
+    } else {
+        node->size = 0;
+    }
+
+    return node;
+}
+
+/* Create basic directory structure for testing */
+void vfs_create_base_dirs(void) {
+    /* Create root directory if it doesn't exist */
+    if (!vfs_state.root) {
+        vfs_state.root = vfs_create_virtual_dir("/");
+        printk("[VFS] Created virtual root directory\n");
+    }
+
+    /* Create /dev directory */
+    vfs_node_t *dev = vfs_create_virtual_dir("dev");
+    if (dev && vfs_state.root) {
+        dev->father = vfs_state.root;
+        dev->next_sibling = vfs_state.root->children;
+        vfs_state.root->children = dev;
+        printk("[VFS] Created /dev directory\n");
+    }
+
+    /* Create /tmp directory */
+    vfs_node_t *tmp = vfs_create_virtual_dir("tmp");
+    if (tmp && vfs_state.root) {
+        tmp->father = vfs_state.root;
+        tmp->next_sibling = vfs_state.root->children;
+        vfs_state.root->children = tmp;
+        printk("[VFS] Created /tmp directory\n");
+    }
+
+    /* Create /home directory */
+    vfs_node_t *home = vfs_create_virtual_dir("home");
+    if (home && vfs_state.root) {
+        home->father = vfs_state.root;
+        home->next_sibling = vfs_state.root->children;
+        vfs_state.root->children = home;
+        printk("[VFS] Created /home directory\n");
+    }
+
+    /* Create a test file in root */
+    vfs_node_t *test = vfs_create_virtual_file("readme.txt", "Welcome to KFS-6!\nThis is a test file.\n");
+    if (test && vfs_state.root) {
+        test->father = vfs_state.root;
+        test->next_sibling = vfs_state.root->children;
+        vfs_state.root->children = test;
+        printk("[VFS] Created /readme.txt test file\n");
+    }
+}
+
+/* Simple readdir for virtual directories */
+static vfs_node_t *vfs_virtual_readdir(vfs_node_t *node, uint32_t index) {
+    if (!node || node->type != VFS_FILE_TYPE_DIRECTORY) {
+        return NULL;
+    }
+
+    uint32_t current = 0;
+    vfs_node_t *child = node->children;
+
+    while (child) {
+        if (current == index) {
+            /* Return a copy of the child node */
+            vfs_node_t *copy = kmalloc(sizeof(vfs_node_t));
+            if (copy) {
+                memcpy(copy, child, sizeof(vfs_node_t));
+            }
+            return copy;
+        }
+        current++;
+        child = child->next_sibling;
+    }
+
+    return NULL;
+}
+
+/* Simple finddir for virtual directories */
+static vfs_node_t *vfs_virtual_finddir(vfs_node_t *node, const char *name) {
+    if (!node || !name || node->type != VFS_FILE_TYPE_DIRECTORY) {
+        return NULL;
+    }
+
+    vfs_node_t *child = node->children;
+
+    while (child) {
+        if (strcmp(child->name, name) == 0) {
+            /* Return the actual child node (not a copy) for path resolution */
+            return child;
+        }
+        child = child->next_sibling;
+    }
+
+    return NULL;
+}
+
 /* Initialize VFS */
 void vfs_init(void) {
     printk("[VFS] Initializing Virtual File System...\n");
 
     memset(&vfs_state, 0, sizeof(vfs_state_t));
 
-    printk("[VFS] VFS initialized\n");
+    /* Create virtual root and base directories */
+    vfs_create_base_dirs();
+
+    /* Set up virtual directory operations */
+    if (vfs_state.root) {
+        vfs_state.root->readdir = vfs_virtual_readdir;
+        vfs_state.root->finddir = vfs_virtual_finddir;
+
+        /* Set up operations for all children */
+        vfs_node_t *child = vfs_state.root->children;
+        while (child) {
+            if (child->type == VFS_FILE_TYPE_DIRECTORY) {
+                child->readdir = vfs_virtual_readdir;
+                child->finddir = vfs_virtual_finddir;
+            }
+            child = child->next_sibling;
+        }
+    }
+
+    printk("[VFS] VFS initialized with virtual filesystem\n");
 }

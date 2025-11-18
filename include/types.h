@@ -17,6 +17,10 @@ typedef signed long long   int64_t;
 /* Size type */
 typedef unsigned int size_t;
 
+/* Pointer-sized integer types */
+typedef unsigned int uintptr_t;
+typedef signed int intptr_t;
+
 /* Boolean type - use _Bool from C99 to avoid C23 keyword conflict */
 #define bool _Bool
 #define false 0
