@@ -16,6 +16,8 @@
 #include "../include/pic.h"
 #include "../include/signal.h"
 #include "../include/syscall.h"
+#include "../include/mouse.h"
+#include "../include/scrollback.h"
 
 /* Display welcome screen */
 static void display_welcome(void) {
@@ -69,6 +71,12 @@ static void display_welcome(void) {
     printk("  - Alt+F1/F2/F3/F4: Switch screens\n");
     printk("  - Backspace: Delete character\n");
     printk("  - Enter: Execute command\n\n");
+
+    vga_set_color(VGA_COLOR_LIGHT_BROWN, VGA_COLOR_BLACK);
+    printk("Mouse:\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    printk("  - Scroll wheel: Navigate up/down in output\n");
+    printk("  - View scrollback buffer (200 lines)\n\n");
 
     printk("> ");
 }
@@ -184,11 +192,18 @@ void kmain(void) {
     /* Initialize virtual memory allocator - MANDATORY for KFS_3 */
     vmalloc_init();
 
+    /* Initialize scrollback buffer */
+    scrollback_init();
+
     /* Initialize keyboard */
     keyboard_init();
 
     /* Enable keyboard interrupts - MANDATORY for KFS_4 */
     keyboard_enable_interrupts();
+
+    /* Initialize mouse (PS/2) for scrolling */
+    mouse_init();
+    mouse_enable_interrupts();
 
     /* Enable interrupts globally */
     interrupts_enable();

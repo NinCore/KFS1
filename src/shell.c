@@ -11,6 +11,10 @@
 #include "../include/kmalloc.h"
 #include "../include/vmalloc.h"
 #include "../include/paging.h"
+#include "../include/panic.h"
+#include "../include/signal.h"
+#include "../include/syscall.h"
+#include "../include/idt.h"
 
 /* Shell state */
 static char shell_buffer[SHELL_BUFFER_SIZE];
@@ -30,6 +34,10 @@ static void cmd_mem(int argc, char **argv);
 static void cmd_kmalloc_stats(int argc, char **argv);
 static void cmd_vmalloc_stats(int argc, char **argv);
 static void cmd_memtest(int argc, char **argv);
+static void cmd_panic(int argc, char **argv);
+static void cmd_signal(int argc, char **argv);
+static void cmd_syscall(int argc, char **argv);
+static void cmd_idt(int argc, char **argv);
 
 /* Command structure */
 struct shell_command {
@@ -45,10 +53,14 @@ static const struct shell_command commands[] = {
     {"stack",      "Display kernel stack information", cmd_stack},
     {"stacktrace", "Display stack trace", cmd_stacktrace},
     {"gdt",        "Display GDT information", cmd_gdt},
+    {"idt",        "Display IDT information", cmd_idt},
     {"mem",        "Display memory information", cmd_mem},
     {"kstats",     "Display kernel heap statistics", cmd_kmalloc_stats},
     {"vstats",     "Display virtual memory statistics", cmd_vmalloc_stats},
     {"memtest",    "Test memory allocation", cmd_memtest},
+    {"panic",      "Trigger a kernel panic", cmd_panic},
+    {"signal",     "Test signal system", cmd_signal},
+    {"syscall",    "Test syscall system", cmd_syscall},
     {"reboot",     "Reboot the system", cmd_reboot},
     {"halt",       "Halt the system", cmd_halt},
     {"echo",       "Echo arguments", cmd_echo},
@@ -291,17 +303,19 @@ static void cmd_about(int argc, char **argv) {
     (void)argv;
 
     vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
-    printk("\n=== KFS_3: Memory Management ===\n");
+    printk("\n=== KFS_4: Interrupt System ===\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    printk("\nKernel From Scratch - Third Subject\n");
+    printk("\nKernel From Scratch - Fourth Subject\n");
     printk("A minimal 32-bit x86 kernel with:\n");
+    printk("  - Interrupt Descriptor Table (IDT)\n");
+    printk("  - CPU Exception Handlers (0x00-0x13)\n");
+    printk("  - Hardware Interrupts (PIC)\n");
+    printk("  - Signal-callback system\n");
+    printk("  - Syscall infrastructure (INT 0x80)\n");
     printk("  - Global Descriptor Table (GDT)\n");
-    printk("  - Stack management and inspection\n");
-    printk("  - Memory paging system\n");
-    printk("  - Physical memory allocator (kmalloc)\n");
-    printk("  - Virtual memory allocator (vmalloc)\n");
+    printk("  - Memory paging and allocators\n");
     printk("  - Kernel panic handling\n");
-    printk("  - Minimalistic debug shell\n");
+    printk("  - Interactive debug shell\n");
     printk("\nArchitecture: i386 (x86)\n");
     printk("Boot Loader: GRUB Multiboot\n");
     printk("No standard library dependencies\n");
@@ -382,11 +396,106 @@ static void cmd_memtest(int argc, char **argv) {
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 }
 
+/* Panic command - test kernel panic */
+static void cmd_panic(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    vga_set_color(VGA_COLOR_LIGHT_BROWN, VGA_COLOR_BLACK);
+    printk("Triggering kernel panic...\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    /* Trigger a kernel panic */
+    kernel_panic("Test panic from shell");
+}
+
+/* Test signal handler */
+static void test_signal_handler(int sig) {
+    vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    printk("\n[SIGNAL] Handler called for signal %d (%s)\n", sig, signal_name(sig));
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+}
+
+/* Signal command - test signal system */
+static void cmd_signal(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    printk("\n=== Signal System Test ===\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    /* Register a signal handler */
+    printk("Registering handler for SIGINT (2)...\n");
+    signal_register(SIGINT, test_signal_handler);
+
+    /* Raise the signal */
+    printk("Raising SIGINT...\n");
+    signal_raise(SIGINT);
+
+    /* Process pending signals */
+    printk("Processing pending signals...\n");
+    signal_process_pending();
+
+    printk("\nSignal test completed!\n\n");
+}
+
+/* Syscall command - test syscall system */
+static void cmd_syscall(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    printk("\n=== Syscall System Test ===\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    printk("Testing syscalls via INT 0x80...\n\n");
+
+    /* Test sys_write (syscall 1) */
+    printk("Test 1: sys_write (SYS_WRITE = 1)\n");
+    const char *msg = "  Hello from syscall!\n";
+    int len = 0;
+    while (msg[len]) len++;
+
+    int result;
+    __asm__ volatile(
+        "mov $1, %%eax\n"      /* syscall number: SYS_WRITE */
+        "mov $1, %%ebx\n"      /* fd: stdout */
+        "mov %1, %%ecx\n"      /* buffer */
+        "mov %2, %%edx\n"      /* count */
+        "int $0x80\n"          /* syscall */
+        "mov %%eax, %0\n"      /* get result */
+        : "=r"(result)
+        : "r"(msg), "r"(len)
+        : "eax", "ebx", "ecx", "edx"
+    );
+    printk("  Result: %d bytes written\n\n", result);
+
+    /* Test sys_exit (syscall 0) */
+    printk("Test 2: sys_exit (SYS_EXIT = 0)\n");
+    __asm__ volatile(
+        "mov $0, %%eax\n"      /* syscall number: SYS_EXIT */
+        "mov $42, %%ebx\n"     /* exit status */
+        "int $0x80\n"          /* syscall */
+        ::: "eax", "ebx"
+    );
+
+    printk("\nSyscall test completed!\n\n");
+}
+
+/* IDT command - display IDT information */
+static void cmd_idt(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    idt_print_info();
+}
+
 /* Shell welcome message */
 static void shell_welcome(void) {
     vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLUE);
     printk("============================================\n");
-    printk("       KFS_3 - Memory Management Shell     \n");
+    printk("       KFS_4 - Interrupt System Shell      \n");
     printk("============================================\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     printk("\n");
@@ -396,6 +505,7 @@ static void shell_welcome(void) {
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     printk("Type 'help' for a list of commands.\n");
     printk("Type 'mem' to see memory system overview.\n");
+    printk("Type 'panic', 'signal', 'syscall' to test features.\n");
     printk("Press Alt+F1 to Alt+F4 to switch screens.\n\n");
 }
 
