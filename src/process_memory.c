@@ -50,21 +50,24 @@ int process_memory_init(struct process *proc) {
         printk("[PROCESS] Failed to allocate code page\n");
         return -1;
     }
+    uint32_t code_phys = paging_get_physical_address((uint32_t)code_page);
     paging_map_page_dir(proc->memory.page_directory, PROCESS_CODE_START,
-                        (uint32_t)code_page, PAGE_PRESENT | PAGE_WRITE);
+                        code_phys, PAGE_PRESENT | PAGE_WRITE);
 
     /* Allocate one page for data (BONUS) */
     void *data_page = vmalloc(PAGE_SIZE);
     if (data_page) {
+        uint32_t data_phys = paging_get_physical_address((uint32_t)data_page);
         paging_map_page_dir(proc->memory.page_directory, PROCESS_DATA_START,
-                            (uint32_t)data_page, PAGE_PRESENT | PAGE_WRITE);
+                            data_phys, PAGE_PRESENT | PAGE_WRITE);
     }
 
     /* Allocate one page for BSS (BONUS) */
     void *bss_page = vmalloc(PAGE_SIZE);
     if (bss_page) {
+        uint32_t bss_phys = paging_get_physical_address((uint32_t)bss_page);
         paging_map_page_dir(proc->memory.page_directory, PROCESS_BSS_START,
-                            (uint32_t)bss_page, PAGE_PRESENT | PAGE_WRITE);
+                            bss_phys, PAGE_PRESENT | PAGE_WRITE);
         /* Clear BSS */
         memset(bss_page, 0, PAGE_SIZE);
     }
@@ -76,8 +79,9 @@ int process_memory_init(struct process *proc) {
         vfree(code_page);
         return -1;
     }
+    uint32_t heap_phys = paging_get_physical_address((uint32_t)heap_page);
     paging_map_page_dir(proc->memory.page_directory, PROCESS_HEAP_START,
-                        (uint32_t)heap_page, PAGE_PRESENT | PAGE_WRITE);
+                        heap_phys, PAGE_PRESENT | PAGE_WRITE);
 
     /* Allocate stack */
     void *stack_page = vmalloc(PROCESS_STACK_SIZE);
@@ -93,9 +97,10 @@ int process_memory_init(struct process *proc) {
     uint32_t num_stack_pages = PROCESS_STACK_SIZE / PAGE_SIZE;
     for (uint32_t i = 0; i < num_stack_pages; i++) {
         uint32_t virt_addr = stack_base + (i * PAGE_SIZE);
-        uint32_t phys_addr = (uint32_t)stack_page + (i * PAGE_SIZE);
+        uint32_t stack_virt = (uint32_t)stack_page + (i * PAGE_SIZE);
+        uint32_t stack_phys = paging_get_physical_address(stack_virt);
         paging_map_page_dir(proc->memory.page_directory, virt_addr,
-                            phys_addr, PAGE_PRESENT | PAGE_WRITE);
+                            stack_phys, PAGE_PRESENT | PAGE_WRITE);
     }
 
     printk("[PROCESS] Memory initialized for PID %d\n", proc->pid);
@@ -132,8 +137,9 @@ int process_memory_copy(struct process *dest, struct process *src) {
         if (src_phys) {
             memcpy(code_page, (void*)src_phys, PAGE_SIZE);
         }
+        uint32_t code_phys = paging_get_physical_address((uint32_t)code_page);
         paging_map_page_dir(dest->memory.page_directory, dest->memory.code_start,
-                            (uint32_t)code_page, PAGE_PRESENT | PAGE_WRITE);
+                            code_phys, PAGE_PRESENT | PAGE_WRITE);
     }
 
     /* Copy data (BONUS) */
@@ -144,8 +150,9 @@ int process_memory_copy(struct process *dest, struct process *src) {
         if (src_phys) {
             memcpy(data_page, (void*)src_phys, PAGE_SIZE);
         }
+        uint32_t data_phys = paging_get_physical_address((uint32_t)data_page);
         paging_map_page_dir(dest->memory.page_directory, dest->memory.data_start,
-                            (uint32_t)data_page, PAGE_PRESENT | PAGE_WRITE);
+                            data_phys, PAGE_PRESENT | PAGE_WRITE);
     }
 
     /* Copy BSS (BONUS) */
@@ -156,8 +163,9 @@ int process_memory_copy(struct process *dest, struct process *src) {
         if (src_phys) {
             memcpy(bss_page, (void*)src_phys, PAGE_SIZE);
         }
+        uint32_t bss_phys = paging_get_physical_address((uint32_t)bss_page);
         paging_map_page_dir(dest->memory.page_directory, dest->memory.bss_start,
-                            (uint32_t)bss_page, PAGE_PRESENT | PAGE_WRITE);
+                            bss_phys, PAGE_PRESENT | PAGE_WRITE);
     }
 
     /* Copy heap */
@@ -168,8 +176,9 @@ int process_memory_copy(struct process *dest, struct process *src) {
         if (src_phys) {
             memcpy(heap_page, (void*)src_phys, PAGE_SIZE);
         }
+        uint32_t heap_phys = paging_get_physical_address((uint32_t)heap_page);
         paging_map_page_dir(dest->memory.page_directory, dest->memory.heap_start,
-                            (uint32_t)heap_page, PAGE_PRESENT | PAGE_WRITE);
+                            heap_phys, PAGE_PRESENT | PAGE_WRITE);
     }
 
     /* Copy stack */
@@ -189,9 +198,10 @@ int process_memory_copy(struct process *dest, struct process *src) {
             }
 
             /* Map each page in destination */
-            uint32_t phys_addr = (uint32_t)stack_page + (i * PAGE_SIZE);
+            uint32_t stack_virt = (uint32_t)stack_page + (i * PAGE_SIZE);
+            uint32_t stack_phys = paging_get_physical_address(stack_virt);
             paging_map_page_dir(dest->memory.page_directory, virt_addr,
-                                phys_addr, PAGE_PRESENT | PAGE_WRITE);
+                                stack_phys, PAGE_PRESENT | PAGE_WRITE);
         }
     }
 
