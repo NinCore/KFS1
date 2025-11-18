@@ -195,18 +195,18 @@ void kmain(void) {
     /* Initialize scrollback buffer */
     scrollback_init();
 
-    /* Initialize keyboard */
+    /* Initialize keyboard FIRST */
     keyboard_init();
+
+    /* Enable interrupts globally BEFORE enabling device IRQs */
+    interrupts_enable();
 
     /* Enable keyboard interrupts - MANDATORY for KFS_4 */
     keyboard_enable_interrupts();
 
-    /* Initialize mouse (PS/2) for scrolling */
+    /* Initialize mouse (PS/2) for scrolling - AFTER keyboard is working */
     mouse_init();
     mouse_enable_interrupts();
-
-    /* Enable interrupts globally */
-    interrupts_enable();
 
     /* Initialize multiple screens */
     init_screens();

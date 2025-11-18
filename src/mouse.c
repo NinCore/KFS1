@@ -106,15 +106,23 @@ static void mouse_handler(struct interrupt_frame *frame) {
 void mouse_init(void) {
     uint8_t status;
 
+    /* Save keyboard state */
+    mouse_wait_input();
+    outb(PS2_COMMAND_PORT, 0x20);
+    mouse_wait_output();
+    uint8_t config = inb(PS2_DATA_PORT);
+
     /* Enable auxiliary device (mouse) */
     mouse_wait_input();
     outb(PS2_COMMAND_PORT, 0xA8);
 
-    /* Enable interrupts for auxiliary device */
+    /* Enable interrupts for auxiliary device, preserve keyboard interrupt */
     mouse_wait_input();
     outb(PS2_COMMAND_PORT, 0x20);
     mouse_wait_output();
-    status = (inb(PS2_DATA_PORT) | 2);
+    status = inb(PS2_DATA_PORT);
+    status |= 0x02;  /* Enable mouse interrupt */
+    status |= 0x01;  /* Keep keyboard interrupt enabled */
     mouse_wait_input();
     outb(PS2_COMMAND_PORT, 0x60);
     mouse_wait_input();
@@ -152,6 +160,9 @@ void mouse_init(void) {
 
     mouse_cycle = 0;
     scroll_delta = 0;
+
+    /* Restore configuration to ensure keyboard still works */
+    (void)config;
 }
 
 void mouse_enable_interrupts(void) {
