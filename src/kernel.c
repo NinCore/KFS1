@@ -17,6 +17,8 @@
 #include "../include/signal.h"
 #include "../include/syscall.h"
 #include "../include/process.h"
+#include "../include/timer.h"
+#include "../include/socket.h"
 /* #include "../include/mouse.h" */       /* Disabled - causes keyboard issues */
 /* #include "../include/scrollback.h" */  /* Disabled - causes keyboard issues */
 
@@ -190,6 +192,12 @@ void kmain(void) {
 
     /* Initialize process system - MANDATORY for KFS_5 */
     process_init();
+
+    /* Initialize socket system - MANDATORY for KFS_5 */
+    socket_init();
+
+    /* Initialize timer for preemptive multitasking - MANDATORY for KFS_5 */
+    timer_init(TIMER_FREQUENCY);
 
     /* DISABLED: Scrollback causes keyboard issues
      * scrollback_init();

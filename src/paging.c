@@ -156,7 +156,8 @@ void page_fault_handler(void) {
 
 /* Allocate and initialize a new page table */
 static page_table_t *paging_alloc_table(void) {
-    page_table_t *table = (page_table_t *)kmalloc(sizeof(page_table_t));
+    /* Page tables MUST be aligned on PAGE_SIZE (4KB) for MMU */
+    page_table_t *table = (page_table_t *)kmalloc_aligned(sizeof(page_table_t), PAGE_SIZE);
     if (!table) {
         return NULL;
     }
@@ -166,8 +167,8 @@ static page_table_t *paging_alloc_table(void) {
 
 /* Create a new page directory for a process */
 page_directory_t *paging_create_directory(void) {
-    /* Allocate page directory */
-    page_directory_t *dir = (page_directory_t *)kmalloc(sizeof(page_directory_t));
+    /* Allocate page directory - MUST be aligned on PAGE_SIZE (4KB) */
+    page_directory_t *dir = (page_directory_t *)kmalloc_aligned(sizeof(page_directory_t), PAGE_SIZE);
     if (!dir) {
         return NULL;
     }
@@ -193,6 +194,17 @@ void paging_destroy_directory(page_directory_t *dir) {
     for (uint32_t i = 2; i < PAGE_ENTRIES; i++) {
         if (dir->entries[i] & PAGE_PRESENT) {
             page_table_t *table = (page_table_t *)(dir->entries[i] & ~0xFFF);
+
+            /* Free all physical pages in this table */
+            for (uint32_t j = 0; j < PAGE_ENTRIES; j++) {
+                if (table->entries[j] & PAGE_PRESENT) {
+                    /* Free the physical page */
+                    void *phys_page = (void *)(table->entries[j] & ~0xFFF);
+                    kfree(phys_page);
+                }
+            }
+
+            /* Free the page table itself */
             kfree(table);
         }
     }
@@ -207,14 +219,18 @@ page_directory_t *paging_clone_directory(page_directory_t *src) {
         return NULL;
     }
 
-    /* Create new directory */
-    page_directory_t *dst = (page_directory_t *)kmalloc(sizeof(page_directory_t));
+    /* Create new directory (aligned) */
+    page_directory_t *dst = (page_directory_t *)kmalloc_aligned(sizeof(page_directory_t), PAGE_SIZE);
     if (!dst) {
         return NULL;
     }
 
-    /* Copy directory entries */
-    memcpy(dst, src, sizeof(page_directory_t));
+    /* Clear directory first */
+    memset(dst, 0, sizeof(page_directory_t));
+
+    /* Copy kernel mappings (entries 0-1) - these are SHARED */
+    dst->entries[0] = src->entries[0];
+    dst->entries[1] = src->entries[1];
 
     /* Clone user page tables (skip kernel tables 0 and 1) */
     for (uint32_t i = 2; i < PAGE_ENTRIES; i++) {
@@ -228,14 +244,32 @@ page_directory_t *paging_clone_directory(page_directory_t *src) {
                 return NULL;
             }
 
-            /* Copy table entries */
-            memcpy(dst_table, src_table, sizeof(page_table_t));
+            /* Clone each page in the table */
+            for (uint32_t j = 0; j < PAGE_ENTRIES; j++) {
+                if (src_table->entries[j] & PAGE_PRESENT) {
+                    /* Allocate NEW physical page for child */
+                    void *new_phys = kmalloc(PAGE_SIZE);
+                    if (!new_phys) {
+                        /* Clean up and fail */
+                        kfree(dst_table);
+                        paging_destroy_directory(dst);
+                        return NULL;
+                    }
+
+                    /* Copy the page content from parent to child */
+                    uint32_t src_phys = src_table->entries[j] & ~0xFFF;
+                    memcpy(new_phys, (void *)src_phys, PAGE_SIZE);
+
+                    /* Set the new page table entry with NEW physical address */
+                    dst_table->entries[j] = ((uint32_t)new_phys) | (src_table->entries[j] & 0xFFF);
+                } else {
+                    /* Page not present, just clear the entry */
+                    dst_table->entries[j] = 0;
+                }
+            }
 
             /* Update directory entry */
             dst->entries[i] = ((uint32_t)dst_table) | (src->entries[i] & 0xFFF);
-
-            /* Note: In a real implementation, you'd implement copy-on-write here */
-            /* For now, we're doing a simple copy of page mappings */
         }
     }
 
