@@ -5,6 +5,7 @@
 #include "../include/string.h"
 #include "../include/kmalloc.h"
 #include "../include/process.h"
+#include "../include/panic.h"
 
 /* Socket table */
 static socket_t socket_table[MAX_SOCKETS];
@@ -21,7 +22,7 @@ void socket_init(void) {
         socket_table[i].fd = -1;
     }
 
-    kernel_info("Socket system initialized");
+    printk("[SOCKET] Socket system initialized\n");
 }
 
 /* Find free socket slot */

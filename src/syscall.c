@@ -3,6 +3,7 @@
 #include "../include/syscall.h"
 #include "../include/idt.h"
 #include "../include/printf.h"
+#include "../include/panic.h"
 
 /* Syscall handler table */
 static syscall_handler_t syscall_handlers[MAX_SYSCALLS];
@@ -125,7 +126,7 @@ void syscall_init(void) {
     syscall_register(SYS_SEND, sys_send);
     syscall_register(SYS_RECV, sys_recv);
 
-    kernel_info("Syscall system initialized");
+    printk("[SYSCALL] Syscall system initialized\n");
 }
 
 /* Register a syscall handler */

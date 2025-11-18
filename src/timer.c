@@ -5,6 +5,7 @@
 #include "../include/pic.h"
 #include "../include/printf.h"
 #include "../include/process.h"
+#include "../include/panic.h"
 #include "../include/io.h"
 
 /* PIT I/O ports */
@@ -65,7 +66,7 @@ void timer_init(uint32_t frequency) {
     /* Unmask IRQ0 (enable timer interrupts) */
     pic_unmask_irq(0);
 
-    kernel_info("Timer initialized at %d Hz (divisor %d)", frequency, divisor);
+    printk("[TIMER] Initialized at %d Hz (divisor %d)\n", frequency, divisor);
 }
 
 /* Get current timer ticks */
