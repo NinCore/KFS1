@@ -275,14 +275,23 @@ void exec_fn(uint32_t addr, void (*function)(void), uint32_t size) {
     }
 
     /* Map the kernel function page directly into process space */
-    /* Get physical address of the function in kernel space */
-    uint32_t func_phys = paging_get_physical_address(addr);
+    /* Calculate page base and offset */
+    uint32_t page_base = addr & ~0xFFF;  /* Page aligned address */
+    uint32_t offset = addr & 0xFFF;       /* Offset within page */
+
+    /* Get physical address of the page containing the function */
+    uint32_t func_phys = paging_get_physical_address(page_base);
     if (func_phys) {
         /* Remap PROCESS_CODE_START to point to the same physical page as the function */
         paging_map_page_dir(proc->memory.page_directory, proc->memory.code_start,
                             func_phys, PAGE_PRESENT | PAGE_WRITE);
+
+        /* CRITICAL: Update EIP to include the offset within the page */
+        proc->context.eip = proc->memory.code_start + offset;
         proc->memory.code_end = proc->memory.code_start + PAGE_SIZE;
-        printk("[EXEC] Mapped kernel function (phys=0x%x) to process code space\n", func_phys);
+
+        printk("[EXEC] Mapped kernel page 0x%x (phys=0x%x) to 0x%x, EIP=0x%x\n",
+               page_base, func_phys, proc->memory.code_start, proc->context.eip);
     } else {
         printk("[EXEC] Failed to get physical address of function\n");
     }
