@@ -53,6 +53,8 @@ extern int sys_fork(uint32_t unused1, uint32_t unused2, uint32_t unused3, uint32
 extern int sys_wait(uint32_t status_ptr, uint32_t unused1, uint32_t unused2, uint32_t unused3, uint32_t unused4);
 extern int sys_getuid(uint32_t unused1, uint32_t unused2, uint32_t unused3, uint32_t unused4, uint32_t unused5);
 extern int sys_kill(uint32_t pid, uint32_t signal, uint32_t unused1, uint32_t unused2, uint32_t unused3);
+extern int sys_mmap(uint32_t addr, uint32_t length, uint32_t prot, uint32_t flags, uint32_t unused);
+extern int sys_brk(uint32_t addr, uint32_t unused1, uint32_t unused2, uint32_t unused3, uint32_t unused4);
 
 /* Syscall dispatcher - called from INT 0x80 */
 void syscall_dispatcher(struct interrupt_frame *frame) {
@@ -100,6 +102,10 @@ void syscall_init(void) {
     syscall_register(SYS_WAIT, sys_wait);
     syscall_register(SYS_GETUID, sys_getuid);
     syscall_register(SYS_KILL, sys_kill);
+
+    /* Register memory syscalls (KFS_5 Bonus) */
+    syscall_register(SYS_MMAP, sys_mmap);
+    syscall_register(SYS_BRK, sys_brk);
 }
 
 /* Register a syscall handler */

@@ -42,6 +42,7 @@ static void cmd_idt(int argc, char **argv);
 static void cmd_process(int argc, char **argv);
 static void cmd_fork(int argc, char **argv);
 static void cmd_psignal(int argc, char **argv);
+static void cmd_mmap(int argc, char **argv);
 
 /* Command structure */
 struct shell_command {
@@ -68,6 +69,7 @@ static const struct shell_command commands[] = {
     {"process",    "Test process system", cmd_process},
     {"fork",       "Test fork syscall", cmd_fork},
     {"psignal",    "Test process signal", cmd_psignal},
+    {"mmap",       "Test mmap syscall", cmd_mmap},
     {"reboot",     "Reboot the system", cmd_reboot},
     {"halt",       "Halt the system", cmd_halt},
     {"echo",       "Echo arguments", cmd_echo},
@@ -628,6 +630,81 @@ static void cmd_psignal(int argc, char **argv) {
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 }
 
+/* MMAP command - test memory mapping */
+static void cmd_mmap(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    printk("\n=== Memory Mapping (mmap) Test ===\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    /* Create a test process */
+    printk("Creating test process...\n");
+    process_t *proc = process_create(test_process_entry, 0);
+
+    if (!proc) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("Failed to create process!\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    printk("Process created (PID: %d)\n", proc->pid);
+    printk("Initial heap: 0x%x - 0x%x\n", proc->heap_start, proc->heap_end);
+
+    /* Test mmap - allocate 8KB */
+    printk("\nMapping 8KB with mmap...\n");
+    void *mapped = process_mmap(proc, NULL, 8192, PROT_READ | PROT_WRITE,
+                                 MAP_PRIVATE | MAP_ANONYMOUS);
+
+    if (mapped == (void *)-1) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("mmap failed!\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    printk("mmap successful!\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    printk("  Mapped at: 0x%x\n", (uint32_t)mapped);
+    printk("  New heap end: 0x%x\n", proc->heap_end);
+
+    /* Test brk - grow heap */
+    printk("\nTesting brk (grow heap by 4KB)...\n");
+    uint32_t new_brk = proc->heap_end + 4096;
+    int result = process_brk(proc, (void *)new_brk);
+
+    if (result != -1) {
+        vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+        printk("brk successful!\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        printk("  New brk: 0x%x\n", result);
+    } else {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("brk failed!\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    }
+
+    /* Display process memory layout */
+    printk("\nProcess Memory Layout:\n");
+    printk("  .text:   0x%x (size: %d, flags: 0x%x)\n",
+           proc->text_section.start_addr, proc->text_section.size, proc->text_section.flags);
+    printk("  .rodata: 0x%x (size: %d, flags: 0x%x)\n",
+           proc->rodata_section.start_addr, proc->rodata_section.size, proc->rodata_section.flags);
+    printk("  .data:   0x%x (size: %d, flags: 0x%x)\n",
+           proc->data_section.start_addr, proc->data_section.size, proc->data_section.flags);
+    printk("  .bss:    0x%x (size: %d, flags: 0x%x)\n",
+           proc->bss_section.start_addr, proc->bss_section.size, proc->bss_section.flags);
+    printk("  heap:    0x%x - 0x%x\n", proc->heap_start, proc->heap_end);
+    printk("  stack:   0x%x\n", proc->user_stack);
+
+    vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    printk("\nMemory mapping test completed!\n\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+}
+
 /* Shell welcome message */
 static void shell_welcome(void) {
     vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLUE);
@@ -670,9 +747,9 @@ void shell_run(void) {
 
             /* Handle shell input */
             shell_handle_input(c);
+        } else {
+            /* No input available - halt CPU until next interrupt (saves CPU!) */
+            __asm__ volatile("hlt");
         }
-
-        /* Small delay */
-        for (volatile int i = 0; i < 10000; i++);
     }
 }

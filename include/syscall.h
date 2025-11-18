@@ -19,6 +19,8 @@
 #define SYS_FORK    9
 #define SYS_WAIT    10
 #define SYS_GETUID  11
+#define SYS_MMAP    12  /* KFS-5 Bonus */
+#define SYS_BRK     13  /* KFS-5 Bonus */
 
 #define MAX_SYSCALLS 256
 
