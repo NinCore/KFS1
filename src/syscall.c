@@ -66,6 +66,14 @@ extern int sys_connect(uint32_t sockfd, uint32_t addr_ptr, uint32_t unused1, uin
 extern int sys_send(uint32_t sockfd, uint32_t buf_ptr, uint32_t len, uint32_t flags, uint32_t unused);
 extern int sys_recv(uint32_t sockfd, uint32_t buf_ptr, uint32_t len, uint32_t flags, uint32_t unused);
 
+/* Forward declarations for environment syscalls (KFS-7) */
+extern int sys_getenv(uint32_t name_ptr, uint32_t buf_ptr, uint32_t buf_size, uint32_t unused1, uint32_t unused2);
+extern int sys_setenv(uint32_t name_ptr, uint32_t value_ptr, uint32_t overwrite, uint32_t unused1, uint32_t unused2);
+extern int sys_unsetenv(uint32_t name_ptr, uint32_t unused1, uint32_t unused2, uint32_t unused3, uint32_t unused4);
+
+/* Forward declarations for user management syscalls (KFS-7) */
+extern int sys_setuid(uint32_t uid, uint32_t unused1, uint32_t unused2, uint32_t unused3, uint32_t unused4);
+
 /* Syscall dispatcher - called from INT 0x80 */
 void syscall_dispatcher(struct interrupt_frame *frame) {
     /* Syscall number in EAX */
@@ -126,7 +134,15 @@ void syscall_init(void) {
     syscall_register(SYS_SEND, sys_send);
     syscall_register(SYS_RECV, sys_recv);
 
-    printk("[SYSCALL] Syscall system initialized\n");
+    /* Register environment syscalls (KFS-7) */
+    syscall_register(SYS_GETENV, sys_getenv);
+    syscall_register(SYS_SETENV, sys_setenv);
+    syscall_register(SYS_UNSETENV, sys_unsetenv);
+
+    /* Register user management syscalls (KFS-7) */
+    syscall_register(SYS_SETUID, sys_setuid);
+
+    printk("[SYSCALL] Syscall system initialized (with KFS-7 extensions)\n");
 }
 
 /* Register a syscall handler */

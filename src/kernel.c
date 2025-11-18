@@ -1,4 +1,4 @@
-/* kernel.c - Main kernel entry point for KFS_4 */
+/* kernel.c - Main kernel entry point for KFS-7 */
 
 #include "../include/vga.h"
 #include "../include/types.h"
@@ -19,6 +19,11 @@
 #include "../include/process.h"
 #include "../include/timer.h"
 #include "../include/socket.h"
+#include "../include/env.h"            /* KFS-7: Environment variables */
+#include "../include/user.h"           /* KFS-7: User accounts */
+#include "../include/vfs_hierarchy.h"  /* KFS-7: Virtual filesystem */
+#include "../include/tty.h"            /* KFS-7: Multiple TTYs */
+#include "../include/login.h"          /* KFS-7: Login system */
 /* #include "../include/mouse.h" */       /* Disabled - causes keyboard issues */
 /* #include "../include/scrollback.h" */  /* Disabled - causes keyboard issues */
 
@@ -27,11 +32,11 @@ static void display_welcome(void) {
     vga_clear();
     vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLUE);
     printk("============================================\n");
-    printk("         KFS_5 - Process System             \n");
+    printk("    KFS-7 - Syscalls, Sockets and env      \n");
     printk("============================================\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     printk("\n");
-    printk("Welcome to KFS_4!\n\n");
+    printk("Welcome to KFS-7!\n\n");
 
     /* Display mandatory features */
     vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
@@ -199,6 +204,21 @@ void kmain(void) {
     /* Initialize timer for preemptive multitasking - MANDATORY for KFS_5 */
     timer_init(TIMER_FREQUENCY);
 
+    /* Initialize environment system - MANDATORY for KFS_7 */
+    env_init();
+
+    /* Initialize user accounts system - MANDATORY for KFS_7 */
+    user_init();
+
+    /* Initialize virtual filesystem hierarchy - MANDATORY for KFS_7 */
+    vfs_hierarchy_init();
+
+    /* Initialize TTY system - BONUS for KFS_7 */
+    tty_init();
+
+    /* Initialize login system - MANDATORY for KFS_7 */
+    login_init();
+
     /* DISABLED: Scrollback causes keyboard issues
      * scrollback_init();
      */
@@ -220,6 +240,13 @@ void kmain(void) {
 
     /* Initialize multiple screens */
     init_screens();
+
+    /* Show login prompt - MANDATORY for KFS_7 */
+    printk("\n");
+    printk("=== KFS-7: User Login Required ===\n\n");
+    if (login_interactive() < 0) {
+        printk("\n[KERNEL] Login failed. Starting shell anyway...\n\n");
+    }
 
     /* Run the shell - BONUS for KFS_3 */
     shell_run();

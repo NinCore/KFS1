@@ -28,6 +28,10 @@
 #define SYS_CONNECT 18  /* KFS-5 MANDATORY - Socket IPC */
 #define SYS_SEND    19  /* KFS-5 MANDATORY - Socket IPC */
 #define SYS_RECV    20  /* KFS-5 MANDATORY - Socket IPC */
+#define SYS_GETENV  21  /* KFS-7 - Environment variables */
+#define SYS_SETENV  22  /* KFS-7 - Environment variables */
+#define SYS_UNSETENV 23 /* KFS-7 - Environment variables */
+#define SYS_SETUID  24  /* KFS-7 - User management */
 
 #define MAX_SYSCALLS 256
 

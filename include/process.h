@@ -49,6 +49,9 @@ typedef struct {
 #define SECTION_WRITE   0x2
 #define SECTION_EXEC    0x4
 
+/* Forward declaration for environment table */
+struct env_table;
+
 /* Process Control Block (PCB) */
 typedef struct process {
     uint32_t pid;                    /* Process ID */
@@ -82,6 +85,9 @@ typedef struct process {
     /* User owner */
     uint32_t uid;
     uint32_t gid;
+
+    /* Environment variables (KFS-7) */
+    struct env_table *environment;
 
     /* Exit status (for zombies) */
     int exit_status;

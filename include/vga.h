@@ -28,6 +28,7 @@ typedef enum {
 /* VGA constants */
 #define VGA_WIDTH 80
 #define VGA_HEIGHT 25
+#define VGA_MEMORY 0xB8000
 
 /* Initialize VGA */
 void vga_init(void);
@@ -50,5 +51,14 @@ void vga_disable_cursor(void);
 void vga_update_cursor(void);
 void vga_get_cursor_position(size_t *row, size_t *col);
 void vga_set_cursor_position(size_t row, size_t col);
+
+/* Helper functions for VGA entries */
+static inline uint8_t vga_make_color(vga_color_t fg, vga_color_t bg) {
+    return (uint8_t)((bg << 4) | fg);
+}
+
+static inline uint16_t vga_make_entry(char c, uint8_t color) {
+    return (uint16_t)c | ((uint16_t)color << 8);
+}
 
 #endif /* VGA_H */

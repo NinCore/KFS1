@@ -16,6 +16,11 @@
 #include "../include/syscall.h"
 #include "../include/idt.h"
 #include "../include/process.h"
+#include "../include/tty.h"            /* KFS-7: TTY system */
+#include "../include/user.h"           /* KFS-7: User accounts */
+#include "../include/env.h"            /* KFS-7: Environment */
+#include "../include/vfs_hierarchy.h"  /* KFS-7: VFS hierarchy */
+#include "../include/socket.h"         /* KFS-7: Sockets */
 
 /* Shell state */
 static char shell_buffer[SHELL_BUFFER_SIZE];
@@ -737,11 +742,10 @@ void shell_run(void) {
                 continue;
             }
 
-            /* Handle screen switching */
+            /* Handle TTY switching (KFS-7 BONUS) */
             if (c >= KEY_F1 && c <= KEY_F4) {
-                extern void handle_screen_switch(int screen_num);
-                int screen_num = c - KEY_F1;
-                handle_screen_switch(screen_num);
+                int tty_num = c - KEY_F1;
+                tty_switch(tty_num);
                 continue;
             }
 
