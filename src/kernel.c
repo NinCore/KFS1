@@ -73,10 +73,10 @@ static void display_welcome(void) {
     printk("  - Enter: Execute command\n\n");
 
     vga_set_color(VGA_COLOR_LIGHT_BROWN, VGA_COLOR_BLACK);
-    printk("Mouse:\n");
+    printk("Scrollback:\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    printk("  - Scroll wheel: Navigate up/down in output\n");
-    printk("  - View scrollback buffer (200 lines)\n\n");
+    printk("  - 200 lines of output history saved\n");
+    printk("  - (Mouse scroll temporarily disabled)\n\n");
 
     printk("> ");
 }
@@ -195,18 +195,20 @@ void kmain(void) {
     /* Initialize scrollback buffer */
     scrollback_init();
 
-    /* Initialize keyboard FIRST */
+    /* Initialize keyboard */
     keyboard_init();
-
-    /* Enable interrupts globally BEFORE enabling device IRQs */
-    interrupts_enable();
 
     /* Enable keyboard interrupts - MANDATORY for KFS_4 */
     keyboard_enable_interrupts();
 
-    /* Initialize mouse (PS/2) for scrolling - AFTER keyboard is working */
-    mouse_init();
-    mouse_enable_interrupts();
+    /* DISABLED: Mouse initialization causes keyboard issues
+     * TODO: Fix PS/2 controller interaction between keyboard and mouse
+     */
+    /* mouse_init(); */
+    /* mouse_enable_interrupts(); */
+
+    /* Enable interrupts globally */
+    interrupts_enable();
 
     /* Initialize multiple screens */
     init_screens();

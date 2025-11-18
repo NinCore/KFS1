@@ -511,8 +511,7 @@ static void shell_welcome(void) {
     printk("Welcome to the KFS Debug Shell!\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     printk("Type 'help' for a list of commands.\n");
-    printk("Type 'mem' to see memory system overview.\n");
-    printk("Type 'panic', 'signal', 'syscall' to test features.\n");
+    printk("Type 'panic', 'signal', 'syscall', 'idt' to test.\n");
     printk("Press Alt+F1 to Alt+F4 to switch screens.\n\n");
 }
 
