@@ -103,7 +103,7 @@ void scheduler_add(struct process *proc);
 void scheduler_remove(struct process *proc);
 
 /* Context switching */
-void context_switch(struct process *from, struct process *to);
+void context_switch(struct process_context *from, struct process_context *to);
 extern void switch_to_process(struct process_context *from, struct process_context *to);
 
 /* Process memory management */

@@ -574,7 +574,7 @@ void shell_run(void) {
             shell_handle_input(c);
         }
 
-        /* Small delay */
-        for (volatile int i = 0; i < 10000; i++);
+        /* Halt CPU until next interrupt (reduces CPU usage to near 0%) */
+        __asm__ volatile("hlt");
     }
 }

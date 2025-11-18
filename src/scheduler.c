@@ -5,6 +5,7 @@
 #include "../include/idt.h"
 #include "../include/pic.h"
 #include "../include/io.h"
+#include "../include/paging.h"
 
 /* Forward declaration */
 void scheduler_timer_tick(struct interrupt_frame *frame);
@@ -115,12 +116,20 @@ void scheduler_run(void) {
     next->state = PROCESS_STATE_RUNNING;
     current_process = next;
 
+    /* Switch to process page directory if it has one */
+    if (next->memory.page_directory) {
+        paging_switch_directory(next->memory.page_directory);
+    }
+
     /* Deliver any pending signals */
     process_deliver_signals(next);
 
     /* Perform context switch */
     if (prev) {
-        context_switch(prev, next);
+        context_switch(&prev->context, &next->context);
+    } else {
+        /* First process - just load context */
+        context_switch(NULL, &next->context);
     }
 }
 
