@@ -12,7 +12,7 @@
 #define PROCESS_DATA_START    0x09000000  /* 144 MB */
 #define PROCESS_BSS_START     0x0A000000  /* 160 MB */
 #define PROCESS_HEAP_START    0x0B000000  /* 176 MB */
-#define PROCESS_STACK_START   0x0FFFF000  /* Just below 256 MB */
+#define PROCESS_STACK_START   0x10000000  /* 256 MB - top of stack */
 #define PROCESS_STACK_SIZE    0x00010000  /* 64 KB stack */
 
 /* Initialize process memory */
