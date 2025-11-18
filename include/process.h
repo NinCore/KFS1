@@ -90,10 +90,23 @@ extern struct process *current_process;
 /* Process management functions */
 void process_init(void);
 struct process *process_create(void (*entry_point)(void), uint32_t uid);
-int process_fork(void);
+int process_fork(void);  /* Internal kernel function - DO NOT call directly from processes */
 void process_exit(int exit_code);
 int process_wait(int *status);
 void process_kill(uint32_t pid, int signal);
+
+/* User-space fork wrapper - ALWAYS use this from processes, not process_fork()! */
+static inline int fork(void) {
+    int ret;
+    __asm__ volatile(
+        "movl $9, %%eax\n"      /* SYS_FORK = 9 */
+        "int $0x80\n"           /* Trigger syscall */
+        : "=a"(ret)             /* Output: EAX -> ret */
+        :                       /* No inputs */
+        : "ebx", "ecx", "edx", "esi", "edi"  /* Clobbered registers */
+    );
+    return ret;
+}
 
 /* Process scheduling */
 void scheduler_init(void);

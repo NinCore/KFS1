@@ -58,7 +58,8 @@ void test_process_3(void) {
 void test_fork_process(void) {
     printk("[FORK TEST] Parent process starting\n");
 
-    int pid = process_fork();
+    /* IMPORTANT: Use fork() wrapper (INT 0x80), not process_fork() directly! */
+    int pid = fork();
 
     if (pid == 0) {
         /* Child process */

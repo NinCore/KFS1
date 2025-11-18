@@ -38,6 +38,71 @@ int sys_read(uint32_t fd, uint32_t buf, uint32_t count, uint32_t unused1, uint32
 
 /* Note: sys_exit is now implemented in process_fork.c */
 
+/* Helper function to save interrupt frame to process context */
+static void save_context_from_frame(struct process_context *ctx, struct interrupt_frame *frame) {
+    /* Save general purpose registers */
+    ctx->eax = frame->eax;
+    ctx->ebx = frame->ebx;
+    ctx->ecx = frame->ecx;
+    ctx->edx = frame->edx;
+    ctx->esi = frame->esi;
+    ctx->edi = frame->edi;
+    ctx->ebp = frame->ebp;
+
+    /* Save instruction pointer and flags */
+    ctx->eip = frame->eip;
+    ctx->eflags = frame->eflags;
+
+    /* Save segment registers (convert from uint32_t to uint16_t) */
+    ctx->cs = (uint16_t)(frame->cs & 0xFFFF);
+    ctx->ds = (uint16_t)(frame->ds & 0xFFFF);
+    ctx->es = (uint16_t)(frame->es & 0xFFFF);
+    ctx->fs = (uint16_t)(frame->fs & 0xFFFF);
+    ctx->gs = (uint16_t)(frame->gs & 0xFFFF);
+
+    /* CRITICAL: Handle ESP and SS correctly based on privilege level */
+    /* If privilege didn't change (CS & 3 == 0), user_esp/user_ss weren't pushed */
+    if ((frame->cs & 3) == 0) {
+        /* Same privilege (ring 0) - calculate ESP before interrupt */
+        /* Total bytes pushed: 12 (CPU: EFLAGS,CS,EIP) + 8 (ISR: err,int_no) + 16 (segments) + 32 (pushal) = 68 */
+        ctx->esp = (uint32_t)frame + 68;
+        ctx->ss = (uint16_t)(frame->ds & 0xFFFF); /* Use current DS as SS */
+
+        printk("[SYSCALL] Calculated ESP = 0x%x (frame=0x%x + 68)\n", ctx->esp, (uint32_t)frame);
+    } else {
+        /* Privilege changed (ring 3 to ring 0) - use saved values */
+        ctx->esp = frame->user_esp;
+        ctx->ss = (uint16_t)(frame->user_ss & 0xFFFF);
+
+        printk("[SYSCALL] Using user_esp = 0x%x\n", ctx->esp);
+    }
+}
+
+/* Helper function to restore process context to interrupt frame */
+static void restore_context_to_frame(struct interrupt_frame *frame, struct process_context *ctx) {
+    /* Restore general purpose registers */
+    frame->eax = ctx->eax;
+    frame->ebx = ctx->ebx;
+    frame->ecx = ctx->ecx;
+    frame->edx = ctx->edx;
+    frame->esi = ctx->esi;
+    frame->edi = ctx->edi;
+    frame->ebp = ctx->ebp;
+    frame->esp = ctx->esp;
+
+    /* Restore instruction pointer and flags */
+    frame->eip = ctx->eip;
+    frame->eflags = ctx->eflags;
+
+    /* Restore segment registers */
+    frame->cs = ctx->cs;
+    frame->ds = ctx->ds;
+    frame->es = ctx->es;
+    frame->fs = ctx->fs;
+    frame->gs = ctx->gs;
+    frame->user_ss = ctx->ss;
+}
+
 /* Syscall dispatcher - called from INT 0x80 */
 void syscall_dispatcher(struct interrupt_frame *frame) {
     /* Syscall number in EAX */
@@ -57,11 +122,31 @@ void syscall_dispatcher(struct interrupt_frame *frame) {
         return;
     }
 
+    /* CRITICAL: Save current context from interrupt frame to process context */
+    /* This is essential for fork() and other context-dependent syscalls */
+    if (current_process) {
+        save_context_from_frame(&current_process->context, frame);
+
+        printk("[SYSCALL] Saved context for PID %d: EIP=0x%x ESP=0x%x EBP=0x%x\n",
+               current_process->pid, current_process->context.eip,
+               current_process->context.esp, current_process->context.ebp);
+        printk("[SYSCALL] Segments: CS=0x%x DS=0x%x SS=0x%x\n",
+               current_process->context.cs, current_process->context.ds,
+               current_process->context.ss);
+    }
+
     /* Call the syscall handler */
     int result = syscall_handlers[syscall_num](arg1, arg2, arg3, arg4, arg5);
 
-    /* Return value in EAX */
+    /* Return value in EAX - update BOTH frame and saved context */
     frame->eax = result;
+
+    /* CRITICAL: Also update the saved context so if process is suspended,
+     * it will resume with the correct return value */
+    if (current_process) {
+        current_process->context.eax = result;
+        printk("[SYSCALL] Updated return value: EAX=%d\n", result);
+    }
 }
 
 /* Initialize syscall system */
