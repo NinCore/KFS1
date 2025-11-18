@@ -275,8 +275,16 @@ void exec_fn(uint32_t addr, void (*function)(void), uint32_t size) {
 
     /* Copy function code to process memory */
     if (size > 0 && addr != 0) {
-        memcpy((void*)proc->memory.code_start, (void*)addr, size);
-        proc->memory.code_end = proc->memory.code_start + size;
+        /* Get physical address of process code page */
+        uint32_t phys_addr = paging_get_physical_address_dir(
+            proc->memory.page_directory, proc->memory.code_start);
+        if (phys_addr) {
+            /* Copy directly to physical address */
+            memcpy((void*)phys_addr, (void*)addr, size);
+            proc->memory.code_end = proc->memory.code_start + size;
+        } else {
+            printk("[EXEC] Failed to get physical address for code\n");
+        }
     }
 
     /* Add to scheduler */
