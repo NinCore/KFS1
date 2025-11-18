@@ -151,10 +151,13 @@ page_directory_t *paging_create_directory(void) {
     /* Clear the directory */
     memset(dir, 0, sizeof(page_directory_t));
 
-    /* Copy kernel mappings (first 256MB) from kernel directory */
-    /* This ensures all kernel code, data, and VGA memory are accessible */
-    for (int i = 0; i < 64; i++) {
-        dir->entries[i] = kernel_directory.entries[i];
+    /* Copy ALL kernel mappings from kernel directory */
+    /* This ensures all kernel code, data, stack, and VGA memory are accessible */
+    /* We copy all present entries to avoid missing any kernel memory */
+    for (int i = 0; i < PAGE_ENTRIES; i++) {
+        if (kernel_directory.entries[i] & PAGE_PRESENT) {
+            dir->entries[i] = kernel_directory.entries[i];
+        }
     }
 
     return dir;
