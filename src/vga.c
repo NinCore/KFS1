@@ -2,7 +2,7 @@
 
 #include "../include/vga.h"
 #include "../include/string.h"
-#include "../include/scrollback.h"
+/* #include "../include/scrollback.h" */  /* Disabled - causes keyboard issues */
 
 /* VGA buffer address */
 #define VGA_MEMORY 0xB8000
@@ -71,12 +71,13 @@ static void vga_putentryat(char c, uint8_t color, size_t x, size_t y) {
 
 /* Scroll screen up one line */
 static void vga_scroll(void) {
-    /* Save the top line to scrollback buffer before it's lost */
+    /* TODO: Scrollback temporarily disabled - causes keyboard issues
     uint16_t top_line[VGA_WIDTH];
     for (size_t x = 0; x < VGA_WIDTH; x++) {
         top_line[x] = vga_buffer[x];
     }
     scrollback_add_line(top_line);
+    */
 
     /* Move all lines up */
     for (size_t y = 0; y < VGA_HEIGHT - 1; y++) {

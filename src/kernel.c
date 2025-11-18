@@ -16,8 +16,8 @@
 #include "../include/pic.h"
 #include "../include/signal.h"
 #include "../include/syscall.h"
-#include "../include/mouse.h"
-#include "../include/scrollback.h"
+/* #include "../include/mouse.h" */       /* Disabled - causes keyboard issues */
+/* #include "../include/scrollback.h" */  /* Disabled - causes keyboard issues */
 
 /* Display welcome screen */
 static void display_welcome(void) {
@@ -72,11 +72,6 @@ static void display_welcome(void) {
     printk("  - Backspace: Delete character\n");
     printk("  - Enter: Execute command\n\n");
 
-    vga_set_color(VGA_COLOR_LIGHT_BROWN, VGA_COLOR_BLACK);
-    printk("Scrollback:\n");
-    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    printk("  - 200 lines of output history saved\n");
-    printk("  - (Mouse scroll temporarily disabled)\n\n");
 
     printk("> ");
 }
@@ -192,8 +187,9 @@ void kmain(void) {
     /* Initialize virtual memory allocator - MANDATORY for KFS_3 */
     vmalloc_init();
 
-    /* Initialize scrollback buffer */
-    scrollback_init();
+    /* DISABLED: Scrollback causes keyboard issues
+     * scrollback_init();
+     */
 
     /* Initialize keyboard */
     keyboard_init();

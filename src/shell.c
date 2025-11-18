@@ -145,13 +145,6 @@ void shell_process_command(const char *command) {
 
 /* Handle keyboard input */
 void shell_handle_input(int c) {
-    /* Exit scrollback mode if we're typing */
-    extern bool scrollback_is_scrolled(void);
-    extern void scrollback_reset(void);
-    if (scrollback_is_scrolled()) {
-        scrollback_reset();
-    }
-
     /* Handle backspace */
     if (c == KEY_BACKSPACE || c == '\b') {
         if (shell_buffer_pos > 0) {
