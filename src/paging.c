@@ -4,6 +4,7 @@
 #include "../include/panic.h"
 #include "../include/printf.h"
 #include "../include/string.h"
+#include "../include/kmalloc.h"
 
 /* Kernel page directory (must be page-aligned) */
 static page_directory_t kernel_directory __attribute__((aligned(PAGE_SIZE)));
@@ -149,4 +150,141 @@ void page_fault_handler(void) {
     printk("\nPage fault at address: 0x%x\n", faulting_address);
 
     kernel_panic("Page fault");
+}
+
+/* ===== Process Memory Management Functions (KFS_5) ===== */
+
+/* Allocate and initialize a new page table */
+static page_table_t *paging_alloc_table(void) {
+    page_table_t *table = (page_table_t *)kmalloc(sizeof(page_table_t));
+    if (!table) {
+        return NULL;
+    }
+    memset(table, 0, sizeof(page_table_t));
+    return table;
+}
+
+/* Create a new page directory for a process */
+page_directory_t *paging_create_directory(void) {
+    /* Allocate page directory */
+    page_directory_t *dir = (page_directory_t *)kmalloc(sizeof(page_directory_t));
+    if (!dir) {
+        return NULL;
+    }
+
+    /* Clear the directory */
+    memset(dir, 0, sizeof(page_directory_t));
+
+    /* Copy kernel mappings (first 8MB) from kernel directory */
+    /* This ensures kernel code/data is accessible in all processes */
+    dir->entries[0] = kernel_directory.entries[0];
+    dir->entries[1] = kernel_directory.entries[1];
+
+    return dir;
+}
+
+/* Destroy a page directory and its page tables */
+void paging_destroy_directory(page_directory_t *dir) {
+    if (!dir) {
+        return;
+    }
+
+    /* Free all user page tables (skip kernel tables 0 and 1) */
+    for (uint32_t i = 2; i < PAGE_ENTRIES; i++) {
+        if (dir->entries[i] & PAGE_PRESENT) {
+            page_table_t *table = (page_table_t *)(dir->entries[i] & ~0xFFF);
+            kfree(table);
+        }
+    }
+
+    /* Free the directory itself */
+    kfree(dir);
+}
+
+/* Clone a page directory (for fork) */
+page_directory_t *paging_clone_directory(page_directory_t *src) {
+    if (!src) {
+        return NULL;
+    }
+
+    /* Create new directory */
+    page_directory_t *dst = (page_directory_t *)kmalloc(sizeof(page_directory_t));
+    if (!dst) {
+        return NULL;
+    }
+
+    /* Copy directory entries */
+    memcpy(dst, src, sizeof(page_directory_t));
+
+    /* Clone user page tables (skip kernel tables 0 and 1) */
+    for (uint32_t i = 2; i < PAGE_ENTRIES; i++) {
+        if (src->entries[i] & PAGE_PRESENT) {
+            /* Allocate new page table */
+            page_table_t *src_table = (page_table_t *)(src->entries[i] & ~0xFFF);
+            page_table_t *dst_table = paging_alloc_table();
+            if (!dst_table) {
+                /* Clean up and fail */
+                paging_destroy_directory(dst);
+                return NULL;
+            }
+
+            /* Copy table entries */
+            memcpy(dst_table, src_table, sizeof(page_table_t));
+
+            /* Update directory entry */
+            dst->entries[i] = ((uint32_t)dst_table) | (src->entries[i] & 0xFFF);
+
+            /* Note: In a real implementation, you'd implement copy-on-write here */
+            /* For now, we're doing a simple copy of page mappings */
+        }
+    }
+
+    return dst;
+}
+
+/* Map a page in a specific directory */
+void paging_map_page_in_directory(page_directory_t *dir, uint32_t virt_addr,
+                                   uint32_t phys_addr, uint32_t flags) {
+    if (!dir) {
+        return;
+    }
+
+    /* Extract directory and table indices */
+    uint32_t dir_index = virt_addr >> 22;
+    uint32_t table_index = (virt_addr >> 12) & 0x3FF;
+
+    /* Check if page directory entry exists */
+    if (!(dir->entries[dir_index] & PAGE_PRESENT)) {
+        /* Allocate a new page table */
+        page_table_t *table = paging_alloc_table();
+        if (!table) {
+            kernel_panic("Cannot allocate page table");
+        }
+
+        /* Set directory entry */
+        dir->entries[dir_index] = ((uint32_t)table) | PAGE_PRESENT | PAGE_WRITE | flags;
+    }
+
+    /* Get the page table */
+    page_table_t *table = (page_table_t *)(dir->entries[dir_index] & ~0xFFF);
+
+    /* Set the page table entry */
+    table->entries[table_index] = (phys_addr & ~0xFFF) | (flags & 0xFFF) | PAGE_PRESENT;
+
+    /* Invalidate TLB entry if this is the current directory */
+    if (dir == current_directory) {
+        __asm__ volatile("invlpg (%0)" : : "r"(virt_addr) : "memory");
+    }
+}
+
+/* Switch to a different page directory */
+void paging_switch_directory(page_directory_t *dir) {
+    if (!dir) {
+        return;
+    }
+
+    current_directory = dir;
+
+    /* Load new page directory into CR3 */
+    __asm__ volatile("mov %0, %%cr3" : : "r"(dir) : "memory");
 }

@@ -44,8 +44,15 @@ int sys_exit(uint32_t status, uint32_t unused1, uint32_t unused2, uint32_t unuse
 
     printk("\n[SYSCALL] Process exited with status %d\n", status);
     /* Would normally terminate the process here */
+    /* With process support, this would call process_exit() */
     return 0;
 }
+
+/* Forward declarations for process syscalls */
+extern int sys_fork(uint32_t unused1, uint32_t unused2, uint32_t unused3, uint32_t unused4, uint32_t unused5);
+extern int sys_wait(uint32_t status_ptr, uint32_t unused1, uint32_t unused2, uint32_t unused3, uint32_t unused4);
+extern int sys_getuid(uint32_t unused1, uint32_t unused2, uint32_t unused3, uint32_t unused4, uint32_t unused5);
+extern int sys_kill(uint32_t pid, uint32_t signal, uint32_t unused1, uint32_t unused2, uint32_t unused3);
 
 /* Syscall dispatcher - called from INT 0x80 */
 void syscall_dispatcher(struct interrupt_frame *frame) {
@@ -87,6 +94,12 @@ void syscall_init(void) {
     syscall_register(SYS_WRITE, sys_write);
     syscall_register(SYS_READ, sys_read);
     syscall_register(SYS_EXIT, sys_exit);
+
+    /* Register process syscalls (KFS_5) */
+    syscall_register(SYS_FORK, sys_fork);
+    syscall_register(SYS_WAIT, sys_wait);
+    syscall_register(SYS_GETUID, sys_getuid);
+    syscall_register(SYS_KILL, sys_kill);
 }
 
 /* Register a syscall handler */

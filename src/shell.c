@@ -15,6 +15,7 @@
 #include "../include/signal.h"
 #include "../include/syscall.h"
 #include "../include/idt.h"
+#include "../include/process.h"
 
 /* Shell state */
 static char shell_buffer[SHELL_BUFFER_SIZE];
@@ -38,6 +39,9 @@ static void cmd_panic(int argc, char **argv);
 static void cmd_signal(int argc, char **argv);
 static void cmd_syscall(int argc, char **argv);
 static void cmd_idt(int argc, char **argv);
+static void cmd_process(int argc, char **argv);
+static void cmd_fork(int argc, char **argv);
+static void cmd_psignal(int argc, char **argv);
 
 /* Command structure */
 struct shell_command {
@@ -61,6 +65,9 @@ static const struct shell_command commands[] = {
     {"panic",      "Trigger a kernel panic", cmd_panic},
     {"signal",     "Test signal system", cmd_signal},
     {"syscall",    "Test syscall system", cmd_syscall},
+    {"process",    "Test process system", cmd_process},
+    {"fork",       "Test fork syscall", cmd_fork},
+    {"psignal",    "Test process signal", cmd_psignal},
     {"reboot",     "Reboot the system", cmd_reboot},
     {"halt",       "Halt the system", cmd_halt},
     {"echo",       "Echo arguments", cmd_echo},
@@ -489,6 +496,136 @@ static void cmd_idt(int argc, char **argv) {
     (void)argv;
 
     idt_print_info();
+}
+
+/* Test process entry point */
+static void test_process_entry(void) {
+    printk("[PROCESS] Test process running! PID: %d\n",
+           process_get_current() ? process_get_current()->pid : 0);
+
+    /* Simulate some work */
+    for (volatile int i = 0; i < 1000000; i++);
+
+    printk("[PROCESS] Test process exiting\n");
+    process_exit(process_get_current(), 42);
+}
+
+/* Process command - test process creation */
+static void cmd_process(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    printk("\n=== Process System Test ===\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    printk("Creating a test process...\n");
+    process_t *proc = process_create(test_process_entry, 0);
+
+    if (proc) {
+        vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+        printk("Process created successfully!\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        printk("  PID: %d\n", proc->pid);
+        printk("  UID: %d\n", proc->uid);
+        printk("  State: %d\n", proc->state);
+        printk("  Kernel stack: 0x%x\n", proc->kernel_stack);
+        printk("  User stack: 0x%x\n", proc->user_stack);
+    } else {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("Failed to create process!\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    }
+
+    printk("\nProcess test completed!\n\n");
+}
+
+/* Fork command - test fork syscall */
+static void cmd_fork(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    printk("\n=== Fork System Test ===\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    /* First create a parent process */
+    printk("Creating parent process...\n");
+    process_t *parent = process_create(test_process_entry, 0);
+
+    if (!parent) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("Failed to create parent process!\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    printk("Parent process created (PID: %d)\n", parent->pid);
+
+    /* Now fork it */
+    printk("\nForking parent process...\n");
+    process_t *child = process_fork(parent);
+
+    if (child) {
+        vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+        printk("Fork successful!\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        printk("  Parent PID: %d\n", parent->pid);
+        printk("  Child PID:  %d\n", child->pid);
+        printk("  Child parent: %d\n", child->parent ? child->parent->pid : 0);
+    } else {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("Fork failed!\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    }
+
+    printk("\nFork test completed!\n\n");
+}
+
+/* Process signal handler for testing */
+static void test_process_signal_handler(int sig) {
+    vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    printk("\n[PSIGNAL] Process received signal %d\n", sig);
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+}
+
+/* Process signal command - test process signal handling */
+static void cmd_psignal(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    printk("\n=== Process Signal Test ===\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    /* Create a test process */
+    printk("Creating test process...\n");
+    process_t *proc = process_create(test_process_entry, 0);
+
+    if (!proc) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("Failed to create process!\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    printk("Process created (PID: %d)\n", proc->pid);
+
+    /* Register a signal handler */
+    printk("Registering signal handler for SIGINT (2)...\n");
+    process_signal_register(proc, 2, test_process_signal_handler);
+
+    /* Send a signal */
+    printk("Sending SIGINT to process...\n");
+    process_signal_send(proc, 2);
+
+    /* Process pending signals */
+    printk("Processing pending signals...\n");
+    process_signal_process(proc);
+
+    vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    printk("\nProcess signal test completed!\n\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 }
 
 /* Shell welcome message */

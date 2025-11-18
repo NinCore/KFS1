@@ -16,6 +16,7 @@
 #include "../include/pic.h"
 #include "../include/signal.h"
 #include "../include/syscall.h"
+#include "../include/process.h"
 /* #include "../include/mouse.h" */       /* Disabled - causes keyboard issues */
 /* #include "../include/scrollback.h" */  /* Disabled - causes keyboard issues */
 
@@ -24,7 +25,7 @@ static void display_welcome(void) {
     vga_clear();
     vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLUE);
     printk("============================================\n");
-    printk("         KFS_4 - Interrupts System          \n");
+    printk("         KFS_5 - Process System             \n");
     printk("============================================\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     printk("\n");
@@ -186,6 +187,9 @@ void kmain(void) {
 
     /* Initialize virtual memory allocator - MANDATORY for KFS_3 */
     vmalloc_init();
+
+    /* Initialize process system - MANDATORY for KFS_5 */
+    process_init();
 
     /* DISABLED: Scrollback causes keyboard issues
      * scrollback_init();

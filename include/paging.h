@@ -55,4 +55,12 @@ uint32_t paging_get_physical_address(uint32_t virt_addr);
 /* Page fault handler */
 void page_fault_handler(void);
 
+/* Process memory management functions (KFS_5) */
+page_directory_t *paging_create_directory(void);
+void paging_destroy_directory(page_directory_t *dir);
+page_directory_t *paging_clone_directory(page_directory_t *src);
+void paging_map_page_in_directory(page_directory_t *dir, uint32_t virt_addr,
+                                   uint32_t phys_addr, uint32_t flags);
+void paging_switch_directory(page_directory_t *dir);
+
 #endif /* PAGING_H */
