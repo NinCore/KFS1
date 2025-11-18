@@ -96,6 +96,7 @@ struct process *process_create(void (*entry_point)(void), uint32_t uid) {
     }
 
     /* Set up context */
+    printk("[PROCESS] DEBUG: stack_start=0x%x\n", proc->memory.stack_start);
     proc->context.eip = (uint32_t)entry_point;
     proc->context.esp = proc->memory.stack_start;
     proc->context.ebp = proc->memory.stack_start;
@@ -106,6 +107,8 @@ struct process *process_create(void (*entry_point)(void), uint32_t uid) {
     proc->context.fs = 0x10;
     proc->context.gs = 0x10;
     proc->context.ss = 0x10;
+    printk("[PROCESS] DEBUG: After init - ESP=0x%x EBP=0x%x SS=0x%x DS=0x%x\n",
+           proc->context.esp, proc->context.ebp, proc->context.ss, proc->context.ds);
 
     /* Initialize signal handlers to default */
     for (int i = 0; i < MAX_SIGNALS; i++) {

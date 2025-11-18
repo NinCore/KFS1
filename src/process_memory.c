@@ -124,63 +124,68 @@ int process_memory_copy(struct process *dest, struct process *src) {
     }
 
     /* Create new page directory */
-    dest->memory.page_directory = paging_create_directory();
-    if (!dest->memory.page_directory) {
+    page_directory_t *new_dir = paging_create_directory();
+    if (!new_dir) {
         return -1;
     }
 
     /* Copy memory layout */
     dest->memory = src->memory;
-    dest->memory.page_directory = dest->memory.page_directory;
+    /* Restore the new page directory (don't share with parent!) */
+    dest->memory.page_directory = new_dir;
 
     /* Copy code */
-    void *code_page = vmalloc(PAGE_SIZE);
+    void *code_page = kmalloc(PAGE_SIZE);
     if (code_page) {
         uint32_t src_phys = paging_get_physical_address_dir(src->memory.page_directory,
                                                              src->memory.code_start);
         if (src_phys) {
             memcpy(code_page, (void*)src_phys, PAGE_SIZE);
         }
-        uint32_t code_phys = paging_get_physical_address((uint32_t)code_page);
+        /* kmalloc returns identity-mapped addresses */
+        uint32_t code_phys = (uint32_t)code_page;
         paging_map_page_dir(dest->memory.page_directory, dest->memory.code_start,
                             code_phys, PAGE_PRESENT | PAGE_WRITE);
     }
 
     /* Copy data (BONUS) */
-    void *data_page = vmalloc(PAGE_SIZE);
+    void *data_page = kmalloc(PAGE_SIZE);
     if (data_page) {
         uint32_t src_phys = paging_get_physical_address_dir(src->memory.page_directory,
                                                              src->memory.data_start);
         if (src_phys) {
             memcpy(data_page, (void*)src_phys, PAGE_SIZE);
         }
-        uint32_t data_phys = paging_get_physical_address((uint32_t)data_page);
+        /* kmalloc returns identity-mapped addresses */
+        uint32_t data_phys = (uint32_t)data_page;
         paging_map_page_dir(dest->memory.page_directory, dest->memory.data_start,
                             data_phys, PAGE_PRESENT | PAGE_WRITE);
     }
 
     /* Copy BSS (BONUS) */
-    void *bss_page = vmalloc(PAGE_SIZE);
+    void *bss_page = kmalloc(PAGE_SIZE);
     if (bss_page) {
         uint32_t src_phys = paging_get_physical_address_dir(src->memory.page_directory,
                                                              src->memory.bss_start);
         if (src_phys) {
             memcpy(bss_page, (void*)src_phys, PAGE_SIZE);
         }
-        uint32_t bss_phys = paging_get_physical_address((uint32_t)bss_page);
+        /* kmalloc returns identity-mapped addresses */
+        uint32_t bss_phys = (uint32_t)bss_page;
         paging_map_page_dir(dest->memory.page_directory, dest->memory.bss_start,
                             bss_phys, PAGE_PRESENT | PAGE_WRITE);
     }
 
     /* Copy heap */
-    void *heap_page = vmalloc(PAGE_SIZE);
+    void *heap_page = kmalloc(PAGE_SIZE);
     if (heap_page) {
         uint32_t src_phys = paging_get_physical_address_dir(src->memory.page_directory,
                                                              src->memory.heap_start);
         if (src_phys) {
             memcpy(heap_page, (void*)src_phys, PAGE_SIZE);
         }
-        uint32_t heap_phys = paging_get_physical_address((uint32_t)heap_page);
+        /* kmalloc returns identity-mapped addresses */
+        uint32_t heap_phys = (uint32_t)heap_page;
         paging_map_page_dir(dest->memory.page_directory, dest->memory.heap_start,
                             heap_phys, PAGE_PRESENT | PAGE_WRITE);
     }
