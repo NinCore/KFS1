@@ -1,5 +1,8 @@
 /* boot.s - Kernel entry point with multiboot header (GNU as syntax) */
 
+/* Mark stack as non-executable */
+.section .note.GNU-stack,"",@progbits
+
 /* Multiboot constants */
 .set MULTIBOOT_MAGIC,        0x1BADB002
 .set MULTIBOOT_ALIGN,        1 << 0

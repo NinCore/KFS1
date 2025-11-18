@@ -1,4 +1,4 @@
-/* kernel.c - Main kernel entry point for KFS_3 */
+/* kernel.c - Main kernel entry point for KFS_4 */
 
 #include "../include/vga.h"
 #include "../include/types.h"
@@ -12,40 +12,66 @@
 #include "../include/kmalloc.h"
 #include "../include/vmalloc.h"
 #include "../include/panic.h"
+#include "../include/idt.h"
+#include "../include/pic.h"
+#include "../include/signal.h"
+#include "../include/syscall.h"
+/* #include "../include/mouse.h" */       /* Disabled - causes keyboard issues */
+/* #include "../include/scrollback.h" */  /* Disabled - causes keyboard issues */
 
 /* Display welcome screen */
 static void display_welcome(void) {
     vga_clear();
     vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLUE);
     printk("============================================\n");
-    printk("         KFS_1 - Kernel From Scratch        \n");
+    printk("         KFS_4 - Interrupts System          \n");
     printk("============================================\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     printk("\n");
-    printk("Welcome to KFS_1!\n\n");
+    printk("Welcome to KFS_4!\n\n");
 
-    /* Display mandatory feature */
+    /* Display mandatory features */
     vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
-    printk("Mandatory: 42\n\n");
+    printk("Mandatory Features:\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    printk("  [X] Interrupt Descriptor Table (IDT)\n");
+    printk("  [X] CPU Exception Handlers (0x00-0x13)\n");
+    printk("  [X] Hardware Interrupts (PIC)\n");
+    printk("  [X] Signal-callback system\n");
+    printk("  [X] Signal scheduling\n");
+    printk("  [X] Register cleaning on panic\n");
+    printk("  [X] Stack saving on panic\n");
+    printk("  [X] Keyboard interrupt handler (IRQ1)\n\n");
 
     /* Display bonus features */
     vga_set_color(VGA_COLOR_CYAN, VGA_COLOR_BLACK);
     printk("Bonus Features:\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    printk("  [X] Scroll and cursor support\n");
-    printk("  [X] Color support\n");
-    printk("  [X] printf/printk helpers\n");
-    printk("  [X] Keyboard input handling\n");
-    printk("  [X] Multiple screens (Alt+F1 to Alt+F4)\n\n");
+    printk("  [X] Syscall infrastructure (INT 0x80)\n");
+    printk("  [X] Multiple keyboard layouts (QWERTY/AZERTY/QWERTZ)\n");
+    printk("  [X] get_line() function\n");
+    printk("  [X] Full KFS_3 features (GDT, Paging, Memory)\n\n");
 
     vga_set_color(VGA_COLOR_LIGHT_BROWN, VGA_COLOR_BLACK);
-    printk("Commands:\n");
+    printk("Shell Commands:\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    printk("  - Type to see input\n");
+    printk("  - help: Display available commands\n");
+    printk("  - clear: Clear the screen\n");
+    printk("  - stack [test|info]: Stack operations\n");
+    printk("  - reboot: Reboot the system\n");
+    printk("  - mem [info]: Memory information\n");
+    printk("  - panic: Trigger a kernel panic\n");
+    printk("  - signal: Test signal system\n");
+    printk("  - syscall: Test syscall system\n");
+    printk("  - idt: Show interrupt information\n\n");
+
+    vga_set_color(VGA_COLOR_LIGHT_BROWN, VGA_COLOR_BLACK);
+    printk("Keyboard:\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     printk("  - Alt+F1/F2/F3/F4: Switch screens\n");
     printk("  - Backspace: Delete character\n");
-    printk("  - Enter: New line\n\n");
+    printk("  - Enter: Execute command\n\n");
+
 
     printk("> ");
 }
@@ -142,6 +168,15 @@ void kmain(void) {
     /* Initialize GDT - MANDATORY for KFS_2 */
     gdt_init();
 
+    /* Initialize IDT - MANDATORY for KFS_4 */
+    idt_init();
+
+    /* Initialize signal system - MANDATORY for KFS_4 */
+    signal_init();
+
+    /* Initialize syscall system - BONUS for KFS_4 */
+    syscall_init();
+
     /* Initialize memory paging - MANDATORY for KFS_3 */
     paging_init();
     paging_enable();
@@ -152,8 +187,24 @@ void kmain(void) {
     /* Initialize virtual memory allocator - MANDATORY for KFS_3 */
     vmalloc_init();
 
+    /* DISABLED: Scrollback causes keyboard issues
+     * scrollback_init();
+     */
+
     /* Initialize keyboard */
     keyboard_init();
+
+    /* Enable keyboard interrupts - MANDATORY for KFS_4 */
+    keyboard_enable_interrupts();
+
+    /* DISABLED: Mouse initialization causes keyboard issues
+     * TODO: Fix PS/2 controller interaction between keyboard and mouse
+     */
+    /* mouse_init(); */
+    /* mouse_enable_interrupts(); */
+
+    /* Enable interrupts globally */
+    interrupts_enable();
 
     /* Initialize multiple screens */
     init_screens();
