@@ -240,30 +240,49 @@ Socket operations verified: create, bind, listen
 
 ---
 
-### 9. BONUS: Multiple TTYs
+### 9. BONUS: Multiple TTYs avec Sessions Séparées (comme vrai Linux!)
 
 Pendant que le kernel tourne:
 
-1. **Appuyez sur Alt+F1** → Switch to TTY 0
-2. **Appuyez sur Alt+F2** → Switch to TTY 1
-3. **Appuyez sur Alt+F3** → Switch to TTY 2
-4. **Appuyez sur Alt+F4** → Switch to TTY 3
+1. **Appuyez sur Alt+F2** → Switch to TTY 1
 
 **Vous verrez:**
 ```
 [ Switched to TTY 1 ]
+
+=== TTY 1 - Login Required ===
+
+Default accounts:
+  Username: root     Password: root
+  Username: user     Password: user
+
+Username: _
 ```
+
+✅ **Chaque TTY a sa propre session login!** Exactement comme Linux!
+
+2. **Loguez-vous** avec `user` / `user` (différent de TTY 0!)
+3. **Appuyez sur Alt+F1** → Retour à TTY 0 (toujours logué en root)
+4. **Appuyez sur Alt+F2** → Retour à TTY 1 (logué en user)
+
+**Testez:**
+- Sur TTY 0: `whoami` → affiche "root"
+- Sur TTY 1: `whoami` → affiche "user"
+- Sur TTY 2: Alt+F3 → nouveau login prompt!
 
 ✅ **Prouve:**
 - Multiple TTYs fonctionnels
+- **Sessions login séparées par TTY** (comme vrai Linux!)
 - Chaque TTY a son propre buffer
+- Chaque TTY peut avoir un user différent logué
 - Device files /dev/tty0-3
 - Alt+F switching works
 
 **Vérifiez que:**
-- Chaque TTY a du texte différent
-- Chaque TTY garde son propre état
-- Vous pouvez retourner au TTY 0 avec Alt+F1
+- Chaque TTY a son propre login
+- Chaque TTY maintient son propre user
+- Vous pouvez avoir root sur TTY0 et user sur TTY1 simultanément
+- C'est exactement comme `Ctrl+Alt+F1-F6` sur Linux!
 
 ---
 
