@@ -84,7 +84,8 @@ static void default_exception_handler(struct interrupt_frame *frame) {
     printk("  ESI=0x%x  EDI=0x%x  EBP=0x%x  ESP=0x%x\n",
            frame->esi, frame->edi, frame->ebp, frame->esp);
     printk("  EIP=0x%x  EFLAGS=0x%x\n", frame->eip, frame->eflags);
-    printk("  CS=0x%x  SS=0x%x\n\n", frame->cs, frame->user_ss);
+    printk("  CS=0x%x  DS=0x%x  ES=0x%x  SS=0x%x\n\n",
+           frame->cs, frame->ds, frame->es, frame->user_ss);
 
     /* Page fault specific information */
     if (frame->int_no == EXC_PAGE_FAULT) {

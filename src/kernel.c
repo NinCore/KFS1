@@ -51,12 +51,24 @@ static void display_welcome(void) {
     printk("  [X] Full KFS_3 features (GDT, Paging, Memory)\n\n");
 
     vga_set_color(VGA_COLOR_LIGHT_BROWN, VGA_COLOR_BLACK);
-    printk("Commands:\n");
+    printk("Shell Commands:\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    printk("  - Type to see input\n");
+    printk("  - help: Display available commands\n");
+    printk("  - clear: Clear the screen\n");
+    printk("  - stack [test|info]: Stack operations\n");
+    printk("  - reboot: Reboot the system\n");
+    printk("  - mem [info]: Memory information\n");
+    printk("  - panic: Trigger a kernel panic\n");
+    printk("  - signal: Test signal system\n");
+    printk("  - syscall: Test syscall system\n");
+    printk("  - idt: Show interrupt information\n\n");
+
+    vga_set_color(VGA_COLOR_LIGHT_BROWN, VGA_COLOR_BLACK);
+    printk("Keyboard:\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     printk("  - Alt+F1/F2/F3/F4: Switch screens\n");
     printk("  - Backspace: Delete character\n");
-    printk("  - Enter: New line\n\n");
+    printk("  - Enter: Execute command\n\n");
 
     printk("> ");
 }

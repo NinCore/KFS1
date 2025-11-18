@@ -22,6 +22,7 @@ struct idt_ptr {
 
 /* Interrupt frame pushed by CPU on interrupt */
 struct interrupt_frame {
+    /* Pushed by pushal in interrupt.s */
     uint32_t edi;
     uint32_t esi;
     uint32_t ebp;
@@ -30,8 +31,15 @@ struct interrupt_frame {
     uint32_t edx;
     uint32_t ecx;
     uint32_t eax;
+    /* Pushed by interrupt.s */
+    uint32_t ds;
+    uint32_t es;
+    uint32_t fs;
+    uint32_t gs;
+    /* Pushed by ISR/IRQ stub */
     uint32_t int_no;         /* Interrupt number */
     uint32_t err_code;       /* Error code (if applicable) */
+    /* Pushed by CPU on interrupt */
     uint32_t eip;
     uint32_t cs;
     uint32_t eflags;

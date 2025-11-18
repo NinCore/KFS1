@@ -1,6 +1,9 @@
 # interrupt.s - Interrupt Service Routine stubs
 # This file defines the low-level interrupt handlers
 
+# Mark stack as non-executable
+.section .note.GNU-stack,"",@progbits
+
 .section .text
 
 # Common ISR stub that saves processor state, calls C handler, and restores state
