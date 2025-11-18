@@ -51,48 +51,56 @@ context_switch:
     movw %ss, 50(%eax)      /* ss */
 
 .skip_save:
-    /* Restore new context */
-    movl %edx, %eax         /* EAX now points to context structure */
+    /* CRITICAL: Restore context using IRET to properly restore CS:EIP */
+    /* We build a fake interrupt frame on the new stack and use IRET */
 
-    /* Restore data segment registers (use CX as temporary) */
-    movw 42(%eax), %cx      /* ds */
-    movw %cx, %ds
-    movw 44(%eax), %cx      /* es */
-    movw %cx, %es
-    movw 46(%eax), %cx      /* fs */
-    movw %cx, %fs
-    movw 48(%eax), %cx      /* gs */
-    movw %cx, %gs
+    movl %edx, %esi         /* ESI = pointer to new context */
 
-    /* Restore general purpose registers (NOT ECX, ESP, EAX yet!) */
-    movl 4(%eax), %ebx      /* ebx */
-    movl 12(%eax), %edx     /* edx */
-    movl 16(%eax), %esi     /* esi */
-    movl 20(%eax), %edi     /* edi */
-    movl 24(%eax), %ebp     /* ebp */
+    /* First, switch to new stack (we need it to build the IRET frame) */
+    /* Temporarily switch SS:ESP */
+    cli                     /* Disable interrupts during stack switch */
+    movw 50(%esi), %cx      /* Load new SS */
+    movw %cx, %ss
+    movl 28(%esi), %esp     /* Load new ESP */
 
-    /* CRITICAL: Restore SS and ESP atomically */
-    /* Intel disables interrupts after MOV to SS for one instruction */
-    movw 50(%eax), %cx      /* Load new SS value */
-    movw %cx, %ss           /* Change SS - interrupts disabled for next instruction */
-    movl 28(%eax), %esp     /* Change ESP immediately - atomic with SS change */
+    /* Build IRET frame on new stack (push in reverse order): */
+    /* Stack must be: SS, ESP, EFLAGS, CS, EIP (for IRET) */
 
-    /* Now we have new stack, but can still use EAX to read from context! */
-    /* Restore remaining registers */
-    movl 8(%eax), %ecx      /* Restore ECX */
+    /* For ring 0 -> ring 0, IRET expects: EFLAGS, CS, EIP */
+    /* For ring 0 -> ring 3, IRET expects: SS, ESP, EFLAGS, CS, EIP */
+    /* We're doing ring 0 -> ring 0, so just push EFLAGS, CS, EIP */
 
-    /* Restore EFLAGS - must use stack */
-    pushl 36(%eax)          /* Push EFLAGS on NEW stack */
+    pushl 36(%esi)          /* Push EFLAGS */
 
-    /* Get EIP for jump */
-    movl 32(%eax), %edx     /* Load EIP into EDX */
+    /* Push CS (zero-extend from uint16_t to uint32_t) */
+    movzwl 40(%esi), %eax
+    pushl %eax              /* Push CS */
 
-    /* Finally restore EAX */
-    movl 0(%eax), %eax      /* Restore EAX - lose pointer to context */
+    pushl 32(%esi)          /* Push EIP */
 
-    /* Restore EFLAGS and jump */
-    popfl                   /* Restore EFLAGS from stack */
-    jmp *%edx               /* Jump to new EIP */
+    /* Restore data segment registers */
+    movw 42(%esi), %ax      /* ds */
+    movw %ax, %ds
+    movw 44(%esi), %ax      /* es */
+    movw %ax, %es
+    movw 46(%esi), %ax      /* fs */
+    movw %ax, %fs
+    movw 48(%esi), %ax      /* gs */
+    movw %ax, %gs
+
+    /* Restore general purpose registers */
+    movl 0(%esi), %eax      /* eax */
+    movl 4(%esi), %ebx      /* ebx */
+    movl 8(%esi), %ecx      /* ecx */
+    movl 12(%esi), %edx     /* edx */
+    movl 20(%esi), %edi     /* edi */
+    movl 24(%esi), %ebp     /* ebp */
+    movl 16(%esi), %esi     /* esi (restore last since we're using it) */
+
+    /* IRET will pop EIP, CS, EFLAGS and restore them atomically */
+    /* This ensures CS:EIP are set correctly */
+    sti                     /* Re-enable interrupts before IRET */
+    iret                    /* Pop EIP, CS, EFLAGS from stack */
 
 /* Simpler version - switch_to_process */
 /* void switch_to_process(struct process_context *from, struct process_context *to) */
