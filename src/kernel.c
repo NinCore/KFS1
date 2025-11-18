@@ -19,6 +19,9 @@
 #include "../include/process.h"
 #include "../include/timer.h"
 #include "../include/socket.h"
+#include "../include/ide.h"
+#include "../include/ext2.h"
+#include "../include/vfs.h"
 /* #include "../include/mouse.h" */       /* Disabled - causes keyboard issues */
 /* #include "../include/scrollback.h" */  /* Disabled - causes keyboard issues */
 
@@ -195,6 +198,45 @@ void kmain(void) {
 
     /* Initialize socket system - MANDATORY for KFS_5 */
     socket_init();
+
+    /* Initialize IDE disk driver - MANDATORY for KFS_6 */
+    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    printk("[INIT] Initializing IDE disk driver...\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    ide_init();
+
+    /* Initialize EXT2 filesystem - MANDATORY for KFS_6 */
+    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    printk("[INIT] Initializing EXT2 filesystem...\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    /* Initialize VFS - MANDATORY for KFS_6 */
+    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    printk("[INIT] Initializing Virtual File System (VFS)...\n");
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    vfs_init();
+
+    /* Mount EXT2 filesystem on primary master drive */
+    ext2_filesystem_t *ext2_fs = kmalloc(sizeof(ext2_filesystem_t));
+    if (ext2_fs) {
+        int result = ext2_init(ext2_fs, IDE_CHANNEL_PRIMARY, IDE_DRIVE_MASTER_IDX);
+        if (result == 0) {
+            vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+            printk("[VFS] EXT2 filesystem detected and mounted at /\n");
+            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+            /* Mount the filesystem */
+            vfs_mount("/", ext2_fs);
+
+            /* Print filesystem info */
+            ext2_print_info(ext2_fs);
+        } else {
+            vga_set_color(VGA_COLOR_LIGHT_BROWN, VGA_COLOR_BLACK);
+            printk("[VFS] No EXT2 filesystem found on primary master\n");
+            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+            kfree(ext2_fs);
+        }
+    }
 
     /* Initialize timer for preemptive multitasking - MANDATORY for KFS_5 */
     timer_init(TIMER_FREQUENCY);

@@ -16,6 +16,7 @@
 #include "../include/syscall.h"
 #include "../include/idt.h"
 #include "../include/process.h"
+#include "../include/vfs.h"
 
 /* Shell state */
 static char shell_buffer[SHELL_BUFFER_SIZE];
@@ -43,6 +44,10 @@ static void cmd_process(int argc, char **argv);
 static void cmd_fork(int argc, char **argv);
 static void cmd_psignal(int argc, char **argv);
 static void cmd_mmap(int argc, char **argv);
+static void cmd_cat(int argc, char **argv);
+static void cmd_pwd(int argc, char **argv);
+static void cmd_cd(int argc, char **argv);
+static void cmd_ls(int argc, char **argv);
 
 /* Command structure */
 struct shell_command {
@@ -70,6 +75,10 @@ static const struct shell_command commands[] = {
     {"fork",       "Test fork syscall", cmd_fork},
     {"psignal",    "Test process signal", cmd_psignal},
     {"mmap",       "Test mmap syscall", cmd_mmap},
+    {"cat",        "Display file contents", cmd_cat},
+    {"pwd",        "Print working directory", cmd_pwd},
+    {"cd",         "Change directory", cmd_cd},
+    {"ls",         "List directory contents", cmd_ls},
     {"reboot",     "Reboot the system", cmd_reboot},
     {"halt",       "Halt the system", cmd_halt},
     {"echo",       "Echo arguments", cmd_echo},
@@ -703,6 +712,241 @@ static void cmd_mmap(int argc, char **argv) {
     vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
     printk("\nMemory mapping test completed!\n\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+}
+
+/* ===== Filesystem Commands (KFS-6) ===== */
+
+/* Helper function to resolve path (absolute or relative) */
+static vfs_node_t *resolve_path_from_pwd(const char *path) {
+    char full_path[256];
+
+    /* If absolute path, use it directly */
+    if (path[0] == '/') {
+        return vfs_resolve_path(path);
+    }
+
+    /* Otherwise, resolve relative to current process pwd */
+    process_t *current = process_get_current();
+    const char *pwd = current ? process_get_pwd(current) : "/";
+
+    /* Build full path */
+    if (strcmp(pwd, "/") == 0) {
+        /* Root directory */
+        snprintf(full_path, sizeof(full_path), "/%s", path);
+    } else {
+        /* Other directory */
+        snprintf(full_path, sizeof(full_path), "%s/%s", pwd, path);
+    }
+
+    return vfs_resolve_path(full_path);
+}
+
+/* Cat command - display file contents */
+static void cmd_cat(int argc, char **argv) {
+    if (argc < 2) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("Usage: cat <file>\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    /* Resolve the file path */
+    vfs_node_t *file = resolve_path_from_pwd(argv[1]);
+
+    if (!file) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("cat: %s: No such file or directory\n", argv[1]);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    /* Check if it's a regular file */
+    if (file->type != VFS_FILE_TYPE_REGULAR) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("cat: %s: Not a regular file\n", argv[1]);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    /* Open the file */
+    if (vfs_open(file, 0) != 0) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("cat: %s: Cannot open file\n", argv[1]);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    /* Allocate buffer for reading */
+    char *buffer = kmalloc(file->size + 1);
+    if (!buffer) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("cat: Cannot allocate buffer\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        vfs_close(file);
+        return;
+    }
+
+    /* Read file contents */
+    int bytes_read = vfs_read(file, 0, file->size, buffer);
+    if (bytes_read < 0) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("cat: %s: Read error\n", argv[1]);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        kfree(buffer);
+        vfs_close(file);
+        return;
+    }
+
+    /* Null-terminate the buffer */
+    buffer[bytes_read] = '\0';
+
+    /* Print the contents */
+    printk("%s", buffer);
+
+    /* Clean up */
+    kfree(buffer);
+    vfs_close(file);
+}
+
+/* PWD command - print working directory */
+static void cmd_pwd(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    process_t *current = process_get_current();
+    const char *pwd = current ? process_get_pwd(current) : "/";
+
+    printk("%s\n", pwd);
+}
+
+/* CD command - change directory */
+static void cmd_cd(int argc, char **argv) {
+    const char *path;
+
+    /* If no argument, go to root */
+    if (argc < 2) {
+        path = "/";
+    } else {
+        path = argv[1];
+    }
+
+    /* Resolve the path */
+    vfs_node_t *dir = resolve_path_from_pwd(path);
+
+    if (!dir) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("cd: %s: No such file or directory\n", path);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    /* Check if it's a directory */
+    if (dir->type != VFS_FILE_TYPE_DIRECTORY) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("cd: %s: Not a directory\n", path);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    /* Build the full path for absolute paths, or resolve relative paths */
+    char full_path[256];
+    if (path[0] == '/') {
+        /* Absolute path */
+        strncpy(full_path, path, sizeof(full_path) - 1);
+        full_path[sizeof(full_path) - 1] = '\0';
+    } else {
+        /* Relative path - need to build full path */
+        process_t *current = process_get_current();
+        const char *pwd = current ? process_get_pwd(current) : "/";
+
+        if (strcmp(pwd, "/") == 0) {
+            snprintf(full_path, sizeof(full_path), "/%s", path);
+        } else {
+            snprintf(full_path, sizeof(full_path), "%s/%s", pwd, path);
+        }
+    }
+
+    /* Update current working directory */
+    process_t *current = process_get_current();
+    if (current) {
+        if (process_set_pwd(current, full_path) != 0) {
+            vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+            printk("cd: Cannot change directory\n");
+            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        }
+    } else {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("cd: No current process\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    }
+}
+
+/* LS command - list directory contents */
+static void cmd_ls(int argc, char **argv) {
+    const char *path;
+
+    /* If no argument, list current directory */
+    if (argc < 2) {
+        process_t *current = process_get_current();
+        path = current ? process_get_pwd(current) : "/";
+    } else {
+        path = argv[1];
+    }
+
+    /* Resolve the directory */
+    vfs_node_t *dir = resolve_path_from_pwd(path);
+
+    if (!dir) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("ls: %s: No such file or directory\n", path);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    /* Check if it's a directory */
+    if (dir->type != VFS_FILE_TYPE_DIRECTORY) {
+        vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        printk("ls: %s: Not a directory\n", path);
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        return;
+    }
+
+    /* List directory entries */
+    printk("\n");
+    uint32_t index = 0;
+    vfs_node_t *entry;
+
+    while ((entry = vfs_readdir(dir, index++)) != NULL) {
+        /* Skip "." and ".." for now */
+        if (strcmp(entry->name, ".") == 0 || strcmp(entry->name, "..") == 0) {
+            continue;
+        }
+
+        /* Color based on file type */
+        if (entry->type == VFS_FILE_TYPE_DIRECTORY) {
+            vga_set_color(VGA_COLOR_LIGHT_BLUE, VGA_COLOR_BLACK);
+        } else {
+            vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        }
+
+        printk("  %s", entry->name);
+
+        /* Add / for directories */
+        if (entry->type == VFS_FILE_TYPE_DIRECTORY) {
+            printk("/");
+        }
+
+        /* Show file size for regular files */
+        if (entry->type == VFS_FILE_TYPE_REGULAR) {
+            vga_set_color(VGA_COLOR_DARK_GREY, VGA_COLOR_BLACK);
+            printk(" (%d bytes)", entry->size);
+        }
+
+        printk("\n");
+    }
+
+    vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    printk("\n");
 }
 
 /* Shell welcome message */

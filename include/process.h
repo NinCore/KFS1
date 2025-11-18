@@ -86,6 +86,9 @@ typedef struct process {
     /* Exit status (for zombies) */
     int exit_status;
 
+    /* Current working directory (KFS-6 MANDATORY) */
+    char pwd[256];  /* Current working directory path */
+
 } process_t;
 
 /* Process management functions */
@@ -113,6 +116,10 @@ void process_handle_exception(uint32_t exception_num);
 /* Helper functions */
 process_t *process_get_by_pid(uint32_t pid);
 uint32_t process_get_current_uid(void);
+
+/* Working directory functions (KFS-6 MANDATORY) */
+const char *process_get_pwd(process_t *proc);
+int process_set_pwd(process_t *proc, const char *path);
 
 /* Memory mapping functions (KFS-5 Bonus) */
 #define PROT_NONE   0x0  /* No access */
