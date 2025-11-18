@@ -83,24 +83,28 @@ int process_memory_init(struct process *proc) {
     paging_map_page_dir(proc->memory.page_directory, PROCESS_HEAP_START,
                         heap_phys, PAGE_PRESENT | PAGE_WRITE);
 
-    /* Allocate stack */
-    void *stack_page = vmalloc(PROCESS_STACK_SIZE);
-    if (!stack_page) {
-        printk("[PROCESS] Failed to allocate stack\n");
-        vfree(code_page);
-        vfree(heap_page);
-        return -1;
-    }
-
-    /* Map stack (grows downward) - map all pages */
+    /* Allocate stack - use kmalloc to get physical pages */
+    /* Map stack (grows downward) - allocate and map all pages */
     uint32_t stack_base = PROCESS_STACK_START - PROCESS_STACK_SIZE;
     uint32_t num_stack_pages = PROCESS_STACK_SIZE / PAGE_SIZE;
     for (uint32_t i = 0; i < num_stack_pages; i++) {
+        /* Allocate one physical page */
+        void *phys_page = kmalloc(PAGE_SIZE);
+        if (!phys_page) {
+            printk("[PROCESS] Failed to allocate stack page %d\n", i);
+            vfree(code_page);
+            vfree(heap_page);
+            return -1;
+        }
+
+        /* With identity mapping, kmalloc returns addresses that are both virtual and physical */
+        /* Get physical address (same as virtual for identity-mapped kernel) */
+        uint32_t phys_addr = (uint32_t)phys_page;
+
+        /* Map this page into process space */
         uint32_t virt_addr = stack_base + (i * PAGE_SIZE);
-        uint32_t stack_virt = (uint32_t)stack_page + (i * PAGE_SIZE);
-        uint32_t stack_phys = paging_get_physical_address(stack_virt);
         paging_map_page_dir(proc->memory.page_directory, virt_addr,
-                            stack_phys, PAGE_PRESENT | PAGE_WRITE);
+                            phys_addr, PAGE_PRESENT | PAGE_WRITE);
     }
 
     printk("[PROCESS] Memory initialized for PID %d\n", proc->pid);
@@ -181,28 +185,31 @@ int process_memory_copy(struct process *dest, struct process *src) {
                             heap_phys, PAGE_PRESENT | PAGE_WRITE);
     }
 
-    /* Copy stack */
-    void *stack_page = vmalloc(PROCESS_STACK_SIZE);
-    if (stack_page) {
-        uint32_t stack_base = PROCESS_STACK_START - PROCESS_STACK_SIZE;
-        uint32_t num_stack_pages = PROCESS_STACK_SIZE / PAGE_SIZE;
+    /* Copy stack - allocate each page with kmalloc */
+    uint32_t stack_base = PROCESS_STACK_START - PROCESS_STACK_SIZE;
+    uint32_t num_stack_pages = PROCESS_STACK_SIZE / PAGE_SIZE;
 
-        /* Copy each page of the stack */
-        for (uint32_t i = 0; i < num_stack_pages; i++) {
-            uint32_t virt_addr = stack_base + (i * PAGE_SIZE);
-            uint32_t src_phys = paging_get_physical_address_dir(src->memory.page_directory,
-                                                                 virt_addr);
-            if (src_phys) {
-                void *dest_page = (void*)((uint32_t)stack_page + (i * PAGE_SIZE));
-                memcpy(dest_page, (void*)src_phys, PAGE_SIZE);
-            }
+    /* Copy each page of the stack */
+    for (uint32_t i = 0; i < num_stack_pages; i++) {
+        uint32_t virt_addr = stack_base + (i * PAGE_SIZE);
+        uint32_t src_phys = paging_get_physical_address_dir(src->memory.page_directory,
+                                                             virt_addr);
 
-            /* Map each page in destination */
-            uint32_t stack_virt = (uint32_t)stack_page + (i * PAGE_SIZE);
-            uint32_t stack_phys = paging_get_physical_address(stack_virt);
-            paging_map_page_dir(dest->memory.page_directory, virt_addr,
-                                stack_phys, PAGE_PRESENT | PAGE_WRITE);
+        /* Allocate new physical page for destination */
+        void *phys_page = kmalloc(PAGE_SIZE);
+        if (!phys_page) {
+            continue; /* Skip this page if allocation fails */
         }
+
+        /* Copy data from source if it exists */
+        if (src_phys) {
+            memcpy(phys_page, (void*)src_phys, PAGE_SIZE);
+        }
+
+        /* Map page in destination process */
+        uint32_t phys_addr = (uint32_t)phys_page;
+        paging_map_page_dir(dest->memory.page_directory, virt_addr,
+                            phys_addr, PAGE_PRESENT | PAGE_WRITE);
     }
 
     return 0;

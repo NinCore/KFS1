@@ -184,7 +184,19 @@ void paging_switch_directory(page_directory_t *dir) {
     current_directory = dir;
 
     /* Load page directory address into CR3 */
-    __asm__ volatile("mov %0, %%cr3" : : "r"(dir));
+    /* With identity mapping for kernel space (first 8MB), virtual address = physical address */
+    /* So we can load the virtual address directly into CR3 */
+    /* In a more complete implementation, we would convert to physical address first */
+    uint32_t dir_phys = (uint32_t)dir;
+
+    /* For safety: verify the address is identity-mapped (in first 8MB) */
+    if (dir_phys >= 0x00800000) {
+        /* Address is beyond identity-mapped region - need physical translation */
+        /* For now, this should not happen as we allocate from kernel heap at 5MB */
+        printk("[PAGING] Warning: page directory at 0x%x is beyond identity-mapped region\n", dir_phys);
+    }
+
+    __asm__ volatile("mov %0, %%cr3" : : "r"(dir_phys));
 
     /* Flush TLB */
     __asm__ volatile("mov %%cr3, %%eax; mov %%eax, %%cr3" : : : "eax");
