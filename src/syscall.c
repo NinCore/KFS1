@@ -3,6 +3,7 @@
 #include "../include/syscall.h"
 #include "../include/idt.h"
 #include "../include/printf.h"
+#include "../include/process.h"
 
 /* Syscall handler table */
 static syscall_handler_t syscall_handlers[MAX_SYSCALLS];
@@ -35,17 +36,7 @@ int sys_read(uint32_t fd, uint32_t buf, uint32_t count, uint32_t unused1, uint32
     return -1;
 }
 
-/* Example syscall: exit */
-int sys_exit(uint32_t status, uint32_t unused1, uint32_t unused2, uint32_t unused3, uint32_t unused4) {
-    (void)unused1;
-    (void)unused2;
-    (void)unused3;
-    (void)unused4;
-
-    printk("\n[SYSCALL] Process exited with status %d\n", status);
-    /* Would normally terminate the process here */
-    return 0;
-}
+/* Note: sys_exit is now implemented in process_fork.c */
 
 /* Syscall dispatcher - called from INT 0x80 */
 void syscall_dispatcher(struct interrupt_frame *frame) {
@@ -86,7 +77,16 @@ void syscall_init(void) {
     /* Register default syscalls */
     syscall_register(SYS_WRITE, sys_write);
     syscall_register(SYS_READ, sys_read);
-    syscall_register(SYS_EXIT, sys_exit);
+    syscall_register(SYS_EXIT, (syscall_handler_t)sys_exit);
+
+    /* Register process syscalls */
+    syscall_register(SYS_FORK, (syscall_handler_t)sys_fork);
+    syscall_register(SYS_WAIT, (syscall_handler_t)sys_wait);
+    syscall_register(SYS_GETUID, (syscall_handler_t)sys_getuid);
+    syscall_register(SYS_SIGNAL, (syscall_handler_t)sys_signal);
+    syscall_register(SYS_KILL, (syscall_handler_t)sys_kill);
+
+    printk("[SYSCALL] Process syscalls registered\n");
 }
 
 /* Register a syscall handler */

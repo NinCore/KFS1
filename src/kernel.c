@@ -1,4 +1,4 @@
-/* kernel.c - Main kernel entry point for KFS_4 */
+/* kernel.c - Main kernel entry point for KFS_5 */
 
 #include "../include/vga.h"
 #include "../include/types.h"
@@ -16,6 +16,7 @@
 #include "../include/pic.h"
 #include "../include/signal.h"
 #include "../include/syscall.h"
+#include "../include/process.h"
 /* #include "../include/mouse.h" */       /* Disabled - causes keyboard issues */
 /* #include "../include/scrollback.h" */  /* Disabled - causes keyboard issues */
 
@@ -24,46 +25,45 @@ static void display_welcome(void) {
     vga_clear();
     vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLUE);
     printk("============================================\n");
-    printk("         KFS_4 - Interrupts System          \n");
+    printk("         KFS_5 - Processes System           \n");
     printk("============================================\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     printk("\n");
-    printk("Welcome to KFS_4!\n\n");
+    printk("Welcome to KFS_5!\n\n");
 
     /* Display mandatory features */
     vga_set_color(VGA_COLOR_GREEN, VGA_COLOR_BLACK);
     printk("Mandatory Features:\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    printk("  [X] Interrupt Descriptor Table (IDT)\n");
-    printk("  [X] CPU Exception Handlers (0x00-0x13)\n");
-    printk("  [X] Hardware Interrupts (PIC)\n");
-    printk("  [X] Signal-callback system\n");
-    printk("  [X] Signal scheduling\n");
-    printk("  [X] Register cleaning on panic\n");
-    printk("  [X] Stack saving on panic\n");
-    printk("  [X] Keyboard interrupt handler (IRQ1)\n\n");
+    printk("  [X] Process Control Blocks (PCB)\n");
+    printk("  [X] Process states & PID management\n");
+    printk("  [X] fork(), wait(), exit(), getuid()\n");
+    printk("  [X] signal(), kill() system calls\n");
+    printk("  [X] Process memory separation (paging)\n");
+    printk("  [X] Signal queuing per process\n");
+    printk("  [X] Round-robin scheduler\n");
+    printk("  [X] Context switching (assembly)\n");
+    printk("  [X] Preemptive multitasking\n\n");
 
     /* Display bonus features */
     vga_set_color(VGA_COLOR_CYAN, VGA_COLOR_BLACK);
     printk("Bonus Features:\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    printk("  [X] Syscall infrastructure (INT 0x80)\n");
-    printk("  [X] Multiple keyboard layouts (QWERTY/AZERTY/QWERTZ)\n");
-    printk("  [X] get_line() function\n");
-    printk("  [X] Full KFS_3 features (GDT, Paging, Memory)\n\n");
+    printk("  [X] mmap() & munmap() system calls\n");
+    printk("  [X] BSS & data section separation\n");
+    printk("  [X] Full KFS_1-4 features\n\n");
 
     vga_set_color(VGA_COLOR_LIGHT_BROWN, VGA_COLOR_BLACK);
     printk("Shell Commands:\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     printk("  - help: Display available commands\n");
     printk("  - clear: Clear the screen\n");
-    printk("  - stack [test|info]: Stack operations\n");
-    printk("  - reboot: Reboot the system\n");
-    printk("  - mem [info]: Memory information\n");
-    printk("  - panic: Trigger a kernel panic\n");
-    printk("  - signal: Test signal system\n");
-    printk("  - syscall: Test syscall system\n");
-    printk("  - idt: Show interrupt information\n\n");
+    printk("  - process: Run multitasking test\n");
+    printk("  - fork: Test fork() system call\n");
+    printk("  - psignal: Test process signals\n");
+    printk("  - stack/mem/idt: System information\n");
+    printk("  - signal/syscall: Test subsystems\n");
+    printk("  - reboot: Reboot the system\n\n");
 
     vga_set_color(VGA_COLOR_LIGHT_BROWN, VGA_COLOR_BLACK);
     printk("Keyboard:\n");
@@ -186,6 +186,9 @@ void kmain(void) {
 
     /* Initialize virtual memory allocator - MANDATORY for KFS_3 */
     vmalloc_init();
+
+    /* Initialize process system - MANDATORY for KFS_5 */
+    process_init();
 
     /* DISABLED: Scrollback causes keyboard issues
      * scrollback_init();

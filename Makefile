@@ -1,4 +1,4 @@
-# Makefile for KFS_1 kernel
+# Makefile for KFS_5 kernel
 
 # Compiler and assembler
 CC = gcc
@@ -29,7 +29,7 @@ KERNEL = kernel.bin
 
 # ISO image for GRUB
 ISO_DIR = isodir
-ISO = kfs1.iso
+ISO = kfs5.iso
 
 .PHONY: all clean iso run kernel
 
@@ -60,7 +60,7 @@ iso: $(KERNEL)
 	echo 'set timeout=0' > $(ISO_DIR)/boot/grub/grub.cfg
 	echo 'set default=0' >> $(ISO_DIR)/boot/grub/grub.cfg
 	echo '' >> $(ISO_DIR)/boot/grub/grub.cfg
-	echo 'menuentry "KFS_1" {' >> $(ISO_DIR)/boot/grub/grub.cfg
+	echo 'menuentry "KFS_5" {' >> $(ISO_DIR)/boot/grub/grub.cfg
 	echo '	multiboot /boot/$(KERNEL)' >> $(ISO_DIR)/boot/grub/grub.cfg
 	echo '	boot' >> $(ISO_DIR)/boot/grub/grub.cfg
 	echo '}' >> $(ISO_DIR)/boot/grub/grub.cfg

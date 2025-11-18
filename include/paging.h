@@ -43,14 +43,32 @@ void paging_enable(void);
 /* Get the current page directory */
 page_directory_t *paging_get_directory(void);
 
+/* Create a new page directory */
+page_directory_t *paging_create_directory(void);
+
+/* Destroy a page directory */
+void paging_destroy_directory(page_directory_t *dir);
+
+/* Switch to a different page directory */
+void paging_switch_directory(page_directory_t *dir);
+
 /* Map a virtual address to a physical address */
 void paging_map_page(uint32_t virt_addr, uint32_t phys_addr, uint32_t flags);
+
+/* Map a virtual address to a physical address in a specific directory */
+void paging_map_page_dir(page_directory_t *dir, uint32_t virt_addr, uint32_t phys_addr, uint32_t flags);
 
 /* Unmap a virtual address */
 void paging_unmap_page(uint32_t virt_addr);
 
+/* Unmap a virtual address in a specific directory */
+void paging_unmap_page_dir(page_directory_t *dir, uint32_t virt_addr);
+
 /* Get physical address from virtual address */
 uint32_t paging_get_physical_address(uint32_t virt_addr);
+
+/* Get physical address from virtual address in a specific directory */
+uint32_t paging_get_physical_address_dir(page_directory_t *dir, uint32_t virt_addr);
 
 /* Page fault handler */
 void page_fault_handler(void);

@@ -15,10 +15,16 @@
 #include "../include/signal.h"
 #include "../include/syscall.h"
 #include "../include/idt.h"
+#include "../include/process.h"
 
 /* Shell state */
 static char shell_buffer[SHELL_BUFFER_SIZE];
 static int shell_buffer_pos = 0;
+
+/* External process test functions */
+extern void process_test_suite(void);
+extern void process_test_fork(void);
+extern void process_test_signals(void);
 
 /* Command function prototypes */
 static void cmd_help(int argc, char **argv);
@@ -38,6 +44,9 @@ static void cmd_panic(int argc, char **argv);
 static void cmd_signal(int argc, char **argv);
 static void cmd_syscall(int argc, char **argv);
 static void cmd_idt(int argc, char **argv);
+static void cmd_process(int argc, char **argv);
+static void cmd_fork(int argc, char **argv);
+static void cmd_psignal(int argc, char **argv);
 
 /* Command structure */
 struct shell_command {
@@ -61,6 +70,9 @@ static const struct shell_command commands[] = {
     {"panic",      "Trigger a kernel panic", cmd_panic},
     {"signal",     "Test signal system", cmd_signal},
     {"syscall",    "Test syscall system", cmd_syscall},
+    {"process",    "Run process multitasking test", cmd_process},
+    {"fork",       "Test fork() system call", cmd_fork},
+    {"psignal",    "Test signals between processes", cmd_psignal},
     {"reboot",     "Reboot the system", cmd_reboot},
     {"halt",       "Halt the system", cmd_halt},
     {"echo",       "Echo arguments", cmd_echo},
@@ -491,11 +503,38 @@ static void cmd_idt(int argc, char **argv) {
     idt_print_info();
 }
 
+/* Process command - run process multitasking test */
+static void cmd_process(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    printk("\n=== Running Process Multitasking Test ===\n\n");
+    process_test_suite();
+}
+
+/* Fork command - test fork() system call */
+static void cmd_fork(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    printk("\n=== Running Fork Test ===\n\n");
+    process_test_fork();
+}
+
+/* Process signal command - test signals between processes */
+static void cmd_psignal(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    printk("\n=== Running Process Signal Test ===\n\n");
+    process_test_signals();
+}
+
 /* Shell welcome message */
 static void shell_welcome(void) {
     vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLUE);
     printk("============================================\n");
-    printk("       KFS_4 - Interrupt System Shell      \n");
+    printk("        KFS_5 - Processes System Shell     \n");
     printk("============================================\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     printk("\n");
@@ -504,7 +543,7 @@ static void shell_welcome(void) {
     printk("Welcome to the KFS Debug Shell!\n");
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     printk("Type 'help' for a list of commands.\n");
-    printk("Type 'panic', 'signal', 'syscall', 'idt' to test.\n");
+    printk("Type 'process', 'fork', 'psignal' to test processes.\n");
     printk("Press Alt+F1 to Alt+F4 to switch screens.\n\n");
 }
 

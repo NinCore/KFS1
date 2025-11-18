@@ -4,6 +4,7 @@
 #include "../include/panic.h"
 #include "../include/printf.h"
 #include "../include/string.h"
+#include "../include/kmalloc.h"
 
 /* Kernel page directory (must be page-aligned) */
 static page_directory_t kernel_directory __attribute__((aligned(PAGE_SIZE)));
@@ -129,6 +130,141 @@ uint32_t paging_get_physical_address(uint32_t virt_addr) {
 
     /* Get the page table */
     page_table_t *table = (page_table_t *)(current_directory->entries[dir_index] & ~0xFFF);
+
+    /* Check if page table entry exists */
+    if (!(table->entries[table_index] & PAGE_PRESENT)) {
+        return 0; /* Not mapped */
+    }
+
+    /* Return physical address */
+    return (table->entries[table_index] & ~0xFFF) | offset;
+}
+
+/* Create a new page directory */
+page_directory_t *paging_create_directory(void) {
+    /* Allocate a new page directory */
+    page_directory_t *dir = (page_directory_t *)kmalloc(sizeof(page_directory_t));
+    if (!dir) {
+        return NULL;
+    }
+
+    /* Clear the directory */
+    memset(dir, 0, sizeof(page_directory_t));
+
+    /* Copy kernel mappings (first 8MB) from kernel directory */
+    dir->entries[0] = kernel_directory.entries[0];
+    dir->entries[1] = kernel_directory.entries[1];
+
+    return dir;
+}
+
+/* Destroy a page directory */
+void paging_destroy_directory(page_directory_t *dir) {
+    if (!dir || dir == &kernel_directory) {
+        return; /* Don't destroy kernel directory */
+    }
+
+    /* TODO: Free all page tables allocated for this directory */
+    /* For now, we only free the directory itself */
+
+    kfree(dir);
+}
+
+/* Switch to a different page directory */
+void paging_switch_directory(page_directory_t *dir) {
+    if (!dir) {
+        return;
+    }
+
+    current_directory = dir;
+
+    /* Load page directory address into CR3 */
+    __asm__ volatile("mov %0, %%cr3" : : "r"(dir));
+
+    /* Flush TLB */
+    __asm__ volatile("mov %%cr3, %%eax; mov %%eax, %%cr3" : : : "eax");
+}
+
+/* Map a virtual address to a physical address in a specific directory */
+void paging_map_page_dir(page_directory_t *dir, uint32_t virt_addr, uint32_t phys_addr, uint32_t flags) {
+    if (!dir) {
+        return;
+    }
+
+    /* Extract directory and table indices from virtual address */
+    uint32_t dir_index = virt_addr >> 22;
+    uint32_t table_index = (virt_addr >> 12) & 0x3FF;
+
+    /* Check if page directory entry exists */
+    if (!(dir->entries[dir_index] & PAGE_PRESENT)) {
+        /* Allocate a new page table */
+        page_table_t *table = (page_table_t *)kmalloc(sizeof(page_table_t));
+        if (!table) {
+            return;
+        }
+        memset(table, 0, sizeof(page_table_t));
+
+        /* Set the page directory entry */
+        dir->entries[dir_index] = ((uint32_t)table) | PAGE_PRESENT | PAGE_WRITE | (flags & PAGE_USER);
+    }
+
+    /* Get the page table */
+    page_table_t *table = (page_table_t *)(dir->entries[dir_index] & ~0xFFF);
+
+    /* Set the page table entry */
+    table->entries[table_index] = (phys_addr & ~0xFFF) | (flags & 0xFFF) | PAGE_PRESENT;
+
+    /* Invalidate TLB entry if this is the current directory */
+    if (dir == current_directory) {
+        __asm__ volatile("invlpg (%0)" : : "r"(virt_addr) : "memory");
+    }
+}
+
+/* Unmap a virtual address in a specific directory */
+void paging_unmap_page_dir(page_directory_t *dir, uint32_t virt_addr) {
+    if (!dir) {
+        return;
+    }
+
+    /* Extract directory and table indices */
+    uint32_t dir_index = virt_addr >> 22;
+    uint32_t table_index = (virt_addr >> 12) & 0x3FF;
+
+    /* Check if page directory entry exists */
+    if (!(dir->entries[dir_index] & PAGE_PRESENT)) {
+        return; /* Already unmapped */
+    }
+
+    /* Get the page table */
+    page_table_t *table = (page_table_t *)(dir->entries[dir_index] & ~0xFFF);
+
+    /* Clear the page table entry */
+    table->entries[table_index] = 0;
+
+    /* Invalidate TLB entry if this is the current directory */
+    if (dir == current_directory) {
+        __asm__ volatile("invlpg (%0)" : : "r"(virt_addr) : "memory");
+    }
+}
+
+/* Get physical address from virtual address in a specific directory */
+uint32_t paging_get_physical_address_dir(page_directory_t *dir, uint32_t virt_addr) {
+    if (!dir) {
+        return 0;
+    }
+
+    /* Extract directory and table indices */
+    uint32_t dir_index = virt_addr >> 22;
+    uint32_t table_index = (virt_addr >> 12) & 0x3FF;
+    uint32_t offset = virt_addr & 0xFFF;
+
+    /* Check if page directory entry exists */
+    if (!(dir->entries[dir_index] & PAGE_PRESENT)) {
+        return 0; /* Not mapped */
+    }
+
+    /* Get the page table */
+    page_table_t *table = (page_table_t *)(dir->entries[dir_index] & ~0xFFF);
 
     /* Check if page table entry exists */
     if (!(table->entries[table_index] & PAGE_PRESENT)) {
